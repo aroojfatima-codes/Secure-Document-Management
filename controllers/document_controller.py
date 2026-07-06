@@ -1,0 +1,341 @@
+"""Document controller — handles upload, listing, detail, and search.
+
+This is the thin presentation-coordination layer.  It validates
+authentication, delegates to the service layer, formats results,
+and handles errors for display.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from database.exceptions import DocumentNotFoundError, UserNotFoundError
+from crypto.exceptions import IntegrityCheckError
+from exceptions.custom_exceptions import (
+    AuthenticationError,
+    FileHandlingError,
+    SDMSException,
+    ValidationError,
+)
+from logger.logging_config import get_logger
+from services.document_download_service import DocumentDownloadService
+from services.document_listing_service import DocumentListingService
+from services.document_service import DocumentUploadService
+from services.document_sharing_service import DocumentSharingService
+
+logger = get_logger(__name__)
+
+
+class DocumentController:
+    """Coordinates document workflows.
+
+    Usage::
+
+        ctrl = DocumentController()
+        result = ctrl.upload("/path/to/doc.pdf")
+        docs = ctrl.list_my_documents(page=1)
+        detail = ctrl.get_document_detail("abc...")
+        results = ctrl.search_my_documents(query="report")
+    """
+
+    def __init__(self) -> None:
+        self._upload_service: DocumentUploadService = DocumentUploadService()
+        self._listing_service: DocumentListingService = DocumentListingService()
+        self._download_service: DocumentDownloadService = DocumentDownloadService()
+        self._sharing_service: DocumentSharingService = DocumentSharingService()
+
+    # ------------------------------------------------------------------
+    # Upload
+    # ------------------------------------------------------------------
+
+    def upload(self, file_path: str) -> dict[str, Any]:
+        """Upload, encrypt, and persist a document.
+
+        Args:
+            file_path: Path to the file on the local filesystem.
+
+        Returns:
+            A dict with the upload result::
+
+                {
+                    "success": True,
+                    "document_id": "...",
+                    "original_filename": "...",
+                    "file_size": 12345,
+                    "message": "Document '...' uploaded and encrypted."
+                }
+        """
+        try:
+            result = self._upload_service.upload(file_path)
+            return {
+                "success": True,
+                **result,
+                "message": (
+                    f"Document '{result['original_filename']}' "
+                    f"uploaded and encrypted successfully."
+                ),
+            }
+        except AuthenticationError as exc:
+            logger.warning("Upload denied — not authenticated.")
+            return {"success": False, "error": str(exc)}
+        except ValidationError as exc:
+            logger.warning("Upload validation failed: %s", exc)
+            return {"success": False, "error": str(exc)}
+        except SDMSException as exc:
+            logger.error("Upload failed: %s", exc)
+            return {"success": False, "error": f"Upload failed: {exc}"}
+
+    # ------------------------------------------------------------------
+    # Listing
+    # ------------------------------------------------------------------
+
+    def list_my_documents(
+        self, page: int = 1, per_page: int = 20
+    ) -> dict[str, Any]:
+        """List documents owned by the current user.
+
+        Args:
+            page:     Page number (1-indexed).
+            per_page: Items per page.
+
+        Returns:
+            A dict with the paginated result::
+
+                {
+                    "success": True,
+                    "documents": [...],
+                    "pagination": {
+                        "page": 1, "per_page": 20,
+                        "total": 5, "total_pages": 1,
+                        "has_next": False, "has_previous": False,
+                    },
+                }
+        """
+        try:
+            result = self._listing_service.list_my_documents(
+                page=page, per_page=per_page
+            )
+            return {"success": True, **result}
+        except AuthenticationError as exc:
+            logger.warning("List denied — not authenticated.")
+            return {"success": False, "error": str(exc), "documents": []}
+        except SDMSException as exc:
+            logger.error("List failed: %s", exc)
+            return {"success": False, "error": str(exc), "documents": []}
+
+    def list_shared_with_me(
+        self, page: int = 1, per_page: int = 20
+    ) -> dict[str, Any]:
+        """List documents shared with the current user.
+
+        Prepared for the upcoming sharing milestone.
+        """
+        try:
+            result = self._listing_service.list_shared_with_me(
+                page=page, per_page=per_page
+            )
+            return {"success": True, **result}
+        except AuthenticationError as exc:
+            logger.warning("List shared denied — not authenticated.")
+            return {"success": False, "error": str(exc), "documents": []}
+        except SDMSException as exc:
+            logger.error("List shared failed: %s", exc)
+            return {"success": False, "error": str(exc), "documents": []}
+
+    # ------------------------------------------------------------------
+    # Detail
+    # ------------------------------------------------------------------
+
+    def get_document_detail(self, document_id: str) -> dict[str, Any]:
+        """View safe metadata for a single document.
+
+        Args:
+            document_id: The UUID4 hex document identifier.
+
+        Returns:
+            A dict with the result::
+
+                {
+                    "success": True,
+                    "document": { ... safe fields ... },
+                }
+        """
+        try:
+            result = self._listing_service.get_document_detail(document_id)
+            return {"success": True, "document": result}
+        except AuthenticationError as exc:
+            logger.warning("Detail denied — not authenticated.")
+            return {"success": False, "error": str(exc)}
+        except (ValidationError, DocumentNotFoundError) as exc:
+            logger.warning("Detail failed: %s", exc)
+            return {"success": False, "error": str(exc)}
+        except SDMSException as exc:
+            logger.error("Detail failed: %s", exc)
+            return {"success": False, "error": str(exc)}
+
+    # ------------------------------------------------------------------
+    # Search
+    # ------------------------------------------------------------------
+
+    def search_my_documents(
+        self,
+        query: str = "",
+        mime_type: str | None = None,
+        page: int = 1,
+        per_page: int = 20,
+    ) -> dict[str, Any]:
+        """Search and filter documents owned by the current user.
+
+        Args:
+            query:     Search term (filename text search).
+            mime_type: Optional MIME type filter.
+            page:      Page number (1-indexed).
+            per_page:  Items per page.
+
+        Returns:
+            A dict with the paginated search result::
+
+                {
+                    "success": True,
+                    "documents": [...],
+                    "pagination": {...},
+                    "search_query": "...",
+                    "mime_filter": "..." or None,
+                }
+        """
+        try:
+            result = self._listing_service.search_my_documents(
+                query=query, mime_type=mime_type, page=page, per_page=per_page
+            )
+            return {
+                "success": True,
+                **result,
+                "search_query": query,
+                "mime_filter": mime_type,
+            }
+        except AuthenticationError as exc:
+            logger.warning("Search denied — not authenticated.")
+            return {
+                "success": False,
+                "error": str(exc),
+                "documents": [],
+                "search_query": query,
+                "mime_filter": mime_type,
+            }
+        except SDMSException as exc:
+            logger.error("Search failed: %s", exc)
+            return {
+                "success": False,
+                "error": str(exc),
+                "documents": [],
+                "search_query": query,
+                "mime_filter": mime_type,
+            }
+
+    # ------------------------------------------------------------------
+    # Download
+    # ------------------------------------------------------------------
+
+    def download(self, document_id: str, output_dir: str) -> dict[str, Any]:
+        """Download, decrypt, verify integrity, and save a document.
+
+        Args:
+            document_id: The UUID4 hex document identifier.
+            output_dir:  Directory path for the restored file.
+
+        Returns:
+            A dict with the download result::
+
+                {
+                    "success": True,
+                    "document_id": "...",
+                    "original_filename": "...",
+                    "output_path": "/path/to/file.pdf",
+                    "file_size": 12345,
+                    "integrity_verified": True,
+                    "message": "Document '...' decrypted and saved."
+                }
+        """
+        try:
+            result = self._download_service.download(
+                document_id=document_id, output_dir=output_dir
+            )
+            return {
+                "success": True,
+                **result,
+                "message": (
+                    f"Document '{result['original_filename']}' "
+                    f"decrypted and saved to '{result['output_path']}'."
+                ),
+            }
+        except AuthenticationError as exc:
+            logger.warning("Download denied — not authenticated.")
+            return {"success": False, "error": str(exc)}
+        except ValidationError as exc:
+            logger.warning("Download validation failed: %s", exc)
+            return {"success": False, "error": str(exc)}
+        except DocumentNotFoundError as exc:
+            logger.warning("Download denied — document not found: %s", exc)
+            return {"success": False, "error": str(exc)}
+        except FileHandlingError as exc:
+            logger.error("Download storage error: %s", exc)
+            return {
+                "success": False,
+                "error": "Encrypted file could not be read from storage.",
+            }
+        except IntegrityCheckError as exc:
+            logger.error("Download integrity failure: %s", exc)
+            return {"success": False, "error": str(exc)}
+        except SDMSException as exc:
+            logger.error("Download failed: %s", exc)
+            return {"success": False, "error": f"Download failed: {exc}"}
+
+    # ------------------------------------------------------------------
+    # Sharing
+    # ------------------------------------------------------------------
+
+    def share_document(
+        self, document_id: str, recipient_username: str
+    ) -> dict[str, Any]:
+        """Share a document with another registered user.
+
+        Args:
+            document_id:       The UUID4 hex document identifier.
+            recipient_username: The recipient's username.
+
+        Returns:
+            A dict with the share result::
+
+                {
+                    "success": True,
+                    "document_id": "...",
+                    "recipient_username": "...",
+                    "permission": "view",
+                    "message": "Document shared with '...'."
+                }
+        """
+        try:
+            result = self._sharing_service.share_document(
+                document_id=document_id,
+                recipient_username=recipient_username,
+            )
+            return {
+                "success": True,
+                **result,
+                "message": (
+                    f"Document shared with "
+                    f"'{result['recipient_username']}'."
+                ),
+            }
+        except AuthenticationError as exc:
+            logger.warning("Share denied — not authenticated.")
+            return {"success": False, "error": str(exc)}
+        except ValidationError as exc:
+            logger.warning("Share validation failed: %s", exc)
+            return {"success": False, "error": str(exc)}
+        except (DocumentNotFoundError, UserNotFoundError) as exc:
+            logger.warning("Share failed: %s", exc)
+            return {"success": False, "error": str(exc)}
+        except SDMSException as exc:
+            logger.error("Share failed: %s", exc)
+            return {"success": False, "error": f"Share failed: {exc}"}
