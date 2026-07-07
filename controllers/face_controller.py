@@ -1,0 +1,135 @@
+from __future__ import annotations
+
+from typing import Any
+
+from exceptions.custom_exceptions import (
+    AuthenticationError,
+    SDMSException,
+)
+from logger.logging_config import get_logger
+from models.audit import AuditAction, OperationStatus, ResourceType, SeverityLevel
+from services.audit_service import AuditService
+from services.auth_service import AuthService
+from services.face_recognition_service import FaceRecognitionService
+
+logger = get_logger(__name__)
+
+
+class FaceController:
+    def __init__(self) -> None:
+        self._face_service: FaceRecognitionService = FaceRecognitionService()
+        self._auth_service: AuthService = AuthService()
+        self._audit_service: AuditService = AuditService()
+
+    def is_available(self) -> bool:
+        return self._face_service.is_available()
+
+    def enroll(self, user_id: str, username: str) -> dict[str, Any]:
+        try:
+            result = self._face_service.enroll_face(user_id, username)
+
+            if result.get("success"):
+                self._audit_service.log_event(
+                    action=AuditAction.FACE_ENROLLMENT.value,
+                    resource_type=ResourceType.USER.value,
+                    resource_id=user_id,
+                    resource_name=username,
+                    status=OperationStatus.SUCCESS.value,
+                    message=(
+                        f"Face enrollment completed for "
+                        f"user '{username}'."
+                    ),
+                    severity=SeverityLevel.INFO.value,
+                    metadata={
+                        "samples": result.get("samples_captured", 0),
+                    },
+                )
+            else:
+                self._audit_service.log_event(
+                    action=AuditAction.FACE_ENROLLMENT_FAILED.value,
+                    resource_type=ResourceType.USER.value,
+                    resource_id=user_id,
+                    resource_name=username,
+                    status=OperationStatus.FAILURE.value,
+                    message=(
+                        f"Face enrollment failed for "
+                        f"user '{username}': {result.get('error', '')}"
+                    ),
+                    severity=SeverityLevel.WARNING.value,
+                )
+
+            return result
+
+        except AuthenticationError as exc:
+            logger.warning("Face enrollment denied — not authenticated.")
+            return {"success": False, "error": str(exc)}
+        except SDMSException as exc:
+            logger.error("Face enrollment failed: %s", exc)
+            return {"success": False, "error": str(exc)}
+
+    def login_face(self) -> dict[str, Any]:
+        try:
+            result = self._face_service.recognize_user()
+
+            if result.get("success"):
+                self._audit_service.log_event(
+                    action=AuditAction.FACE_LOGIN.value,
+                    resource_type=ResourceType.SESSION.value,
+                    resource_id=result["user_id"],
+                    resource_name=result["username"],
+                    status=OperationStatus.SUCCESS.value,
+                    message=(
+                        f"User '{result['username']}' logged in via "
+                        f"face recognition."
+                    ),
+                    severity=SeverityLevel.INFO.value,
+                    metadata={
+                        "match_distance": result.get("distance"),
+                    },
+                )
+            else:
+                self._audit_service.log_event(
+                    action=AuditAction.FACE_LOGIN_FAILED.value,
+                    resource_type=ResourceType.SESSION.value,
+                    resource_id="",
+                    resource_name="",
+                    status=OperationStatus.FAILURE.value,
+                    message=(
+                        f"Face recognition login failed: "
+                        f"{result.get('error', '')}"
+                    ),
+                    severity=SeverityLevel.WARNING.value,
+                )
+
+            return result
+
+        except SDMSException as exc:
+            logger.error("Face login failed: %s", exc)
+            return {"success": False, "error": str(exc)}
+
+    def remove_enrollment(self, user_id: str, username: str) -> dict[str, Any]:
+        try:
+            result = self._face_service.remove_enrollment(user_id)
+
+            if result.get("success"):
+                self._audit_service.log_event(
+                    action=AuditAction.FACE_ENROLLMENT_REMOVED.value,
+                    resource_type=ResourceType.USER.value,
+                    resource_id=user_id,
+                    resource_name=username,
+                    status=OperationStatus.SUCCESS.value,
+                    message=(
+                        f"Face enrollment removed for "
+                        f"user '{username}'."
+                    ),
+                    severity=SeverityLevel.INFO.value,
+                )
+
+            return result
+
+        except SDMSException as exc:
+            logger.error("Remove enrollment failed: %s", exc)
+            return {"success": False, "error": str(exc)}
+
+    def is_enrolled(self, user_id: str) -> bool:
+        return self._face_service.is_enrolled(user_id)

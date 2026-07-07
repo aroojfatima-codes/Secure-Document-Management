@@ -31,6 +31,8 @@ class User(BaseModel):
         created_at:      Account creation timestamp (UTC).
         updated_at:      Last modification timestamp (UTC).
         is_active:       Whether the account is enabled.
+        face_encoding:   Facial recognition encoding (list of floats) or empty.
+        face_enrolled:   Whether the user has enrolled facial biometrics.
     """
 
     user_id: str = ""
@@ -46,6 +48,8 @@ class User(BaseModel):
         default_factory=lambda: datetime.now(timezone.utc)
     )
     is_active: bool = True
+    face_encoding: list[float] = field(default_factory=list)
+    face_enrolled: bool = False
 
     # ------------------------------------------------------------------
     # BaseModel interface
@@ -63,6 +67,8 @@ class User(BaseModel):
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "is_active": self.is_active,
+            "face_encoding": self.face_encoding,
+            "face_enrolled": self.face_enrolled,
         }
 
     def validate(self) -> None:
@@ -97,6 +103,10 @@ class User(BaseModel):
         Handles both raw MongoDB documents (with ``_id``)
         and the dicts produced by :meth:`to_dict`.
         """
+        raw_encoding: Any = data.get("face_encoding", [])
+        face_encoding: list[float] = (
+            list(raw_encoding) if raw_encoding else []
+        )
         return cls(
             user_id=data.get("user_id", ""),
             username=data.get("username", ""),
@@ -109,6 +119,8 @@ class User(BaseModel):
                 "updated_at", datetime.now(timezone.utc)
             ),
             is_active=data.get("is_active", True),
+            face_encoding=face_encoding,
+            face_enrolled=data.get("face_enrolled", False),
         )
 
     # ------------------------------------------------------------------

@@ -10,7 +10,9 @@ from __future__ import annotations
 from typing import Any
 
 from controllers.auth_controller import AuthController
+from controllers.audit_controller import AuditController
 from controllers.document_controller import DocumentController
+from controllers.face_controller import FaceController
 from logger.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -28,6 +30,12 @@ def display_welcome() -> None:
     print(WELCOME_ART)
 
 
+def _is_admin(controller: AuthController) -> bool:
+    """Check whether the current user has the admin role."""
+    user = controller.get_current_user()
+    return user is not None and user.get("role") == "admin"
+
+
 def run_cli() -> None:
     """Run the interactive CLI menu loop.
 
@@ -37,6 +45,8 @@ def run_cli() -> None:
     logger.info("CLI started — interactive mode.")
     controller = AuthController()
     doc_controller = DocumentController()
+    audit_controller = AuditController()
+    face_controller = FaceController()
 
     while True:
         print()
@@ -52,11 +62,13 @@ def run_cli() -> None:
             logger.info("CLI session ended by user.")
             break
         elif choice == "1":
-            _handle_registration(controller)
+            _handle_registration(controller, face_controller)
         elif choice == "2":
             _handle_login(controller)
         elif choice == "3" and controller.is_authenticated():
             _handle_logout(controller)
+        elif choice == "3" and not controller.is_authenticated():
+            _handle_face_login(face_controller)
         elif choice == "4" and controller.is_authenticated():
             _handle_upload(doc_controller)
         elif choice == "5" and controller.is_authenticated():
@@ -71,6 +83,12 @@ def run_cli() -> None:
             _handle_share(doc_controller)
         elif choice == "10" and controller.is_authenticated():
             _handle_shared_documents(doc_controller)
+        elif choice == "11" and controller.is_authenticated() and _is_admin(controller):
+            _handle_audit_logs(audit_controller)
+        elif choice == "12" and controller.is_authenticated() and _is_admin(controller):
+            _handle_audit_search(audit_controller)
+        elif choice == "13" and controller.is_authenticated():
+            _handle_face_settings(face_controller, controller)
         else:
             print("  Invalid choice. Please try again.")
 
@@ -80,6 +98,7 @@ def _print_menu(controller: AuthController) -> None:
     print("  ┌─────────────────────────────────────┐")
     if controller.is_authenticated():
         user = controller.get_current_user()
+        is_admin: bool = user is not None and user.get("role") == "admin"
         print(
             f"  │  Logged in as {user['username']:<20}│"
             if user
@@ -94,16 +113,26 @@ def _print_menu(controller: AuthController) -> None:
         print("  │  [8] Download Document                │")
         print("  │  [9] Share Document                    │")
         print("  │  [10] Shared With Me                   │")
+        if is_admin:
+            print("  ├─────────────────────────────────────┤")
+            print("  │  [11] View Audit Logs                 │")
+            print("  │  [12] Search Audit Logs               │")
+        print("  ├─────────────────────────────────────┤")
+        print("  │  [13] Face Settings                    │")
     else:
         print("  │  Main Menu                            │")
         print("  ├─────────────────────────────────────┤")
         print("  │  [1] Register                         │")
-        print("  │  [2] Login                            │")
+        print("  │  [2] Login (Password)                  │")
+        print("  │  [3] Login (Face Recognition)          │")
     print("  │  [0] Exit                              │")
     print("  └─────────────────────────────────────┘")
 
 
-def _handle_registration(controller: AuthController) -> None:
+def _handle_registration(
+    controller: AuthController,
+    face_controller: FaceController,
+) -> None:
     """Prompt for registration details and process them."""
     print()
     print("  --- User Registration ---")
@@ -139,6 +168,33 @@ def _handle_registration(controller: AuthController) -> None:
         print(f"    User ID   : {result['user_id']}")
         print(f"    Username  : {result['username']}")
         print(f"    Role      : {result['role']}")
+
+        print()
+        print("  --- Optional Face Recognition ---")
+        if not face_controller.is_available():
+            print(
+                "  Face recognition libraries not available. "
+                "Skipping enrollment."
+            )
+            print(
+                "  Install opencv-python and face_recognition "
+                "to enable this feature."
+            )
+        else:
+            choice: str = input(
+                "  Enable Face Recognition Authentication? (y/n): "
+            ).strip().lower()
+            if choice == "y":
+                _handle_face_enrollment(
+                    face_controller,
+                    result["user_id"],
+                    result["username"],
+                )
+            else:
+                print(
+                    "  Face recognition not enabled. "
+                    "You can enable it later via [13] Face Settings."
+                )
     else:
         print(f"  ✗ {result['error']}")
 
@@ -167,6 +223,123 @@ def _handle_login(controller: AuthController) -> None:
         print(f"  ✓ {result['message']}")
     else:
         print(f"  ✗ {result['error']}")
+
+
+def _handle_face_login(face_controller: FaceController) -> None:
+    """Prompt for face recognition login."""
+    print()
+    print("  --- Face Recognition Login ---")
+    print()
+
+    if not face_controller.is_available():
+        print(
+            "  Face recognition libraries are not installed."
+        )
+        print(
+            "  Use [2] Login (Password) instead."
+        )
+        return
+
+    print("  Looking at camera...")
+    result: dict[str, Any] = face_controller.login_face()
+
+    print()
+    if result.get("success"):
+        print(f"  ✓ {result['message']}")
+    else:
+        print(f"  ✗ {result['error']}")
+
+
+def _handle_face_enrollment(
+    face_controller: FaceController,
+    user_id: str,
+    username: str,
+) -> None:
+    """Run the face enrollment workflow."""
+    print()
+    print("  --- Face Enrollment ---")
+    print()
+
+    if not face_controller.is_available():
+        print(
+            "  Face recognition libraries are not installed."
+        )
+        return
+
+    print("  You will be asked to capture several facial images.")
+    print("  Ensure good lighting and look directly at the camera.")
+    print()
+
+    input("  Press Enter to start enrollment...")
+
+    result: dict[str, Any] = face_controller.enroll(user_id, username)
+
+    print()
+    if result.get("success"):
+        print(f"  ✓ {result['message']}")
+    else:
+        print(f"  ✗ {result['error']}")
+
+
+def _handle_face_settings(
+    face_controller: FaceController,
+    controller: AuthController,
+) -> None:
+    """Manage face recognition settings for the current user."""
+    print()
+    print("  --- Face Recognition Settings ---")
+    print()
+
+    if not face_controller.is_available():
+        print(
+            "  Face recognition libraries are not installed."
+        )
+        return
+
+    user = controller.get_current_user()
+    if not user:
+        print("  Could not retrieve user information.")
+        return
+
+    user_id: str = user["user_id"]
+    username: str = user["username"]
+    enrolled: bool = face_controller.is_enrolled(user_id)
+
+    if enrolled:
+        print(f"  Status: Face recognition is ENABLED for '{username}'.")
+        print()
+        print("  [1] Re-enroll Face Data")
+        print("  [2] Remove Face Enrollment")
+        print("  [0] Back to Main Menu")
+        print()
+
+        choice: str = input("  Enter your choice: ").strip()
+
+        if choice == "1":
+            _handle_face_enrollment(face_controller, user_id, username)
+        elif choice == "2":
+            confirm: str = input(
+                "  Are you sure? This will remove your facial data. (y/n): "
+            ).strip().lower()
+            if confirm == "y":
+                result = face_controller.remove_enrollment(user_id, username)
+                print()
+                if result.get("success"):
+                    print(f"  ✓ {result['message']}")
+                else:
+                    print(f"  ✗ {result['error']}")
+            else:
+                print("  Removal cancelled.")
+    else:
+        print(f"  Status: Face recognition is DISABLED for '{username}'.")
+        print()
+        choice = input(
+            "  Enable Face Recognition Authentication? (y/n): "
+        ).strip().lower()
+        if choice == "y":
+            _handle_face_enrollment(face_controller, user_id, username)
+        else:
+            print("  Face recognition not enabled.")
 
 
 def _handle_logout(controller: AuthController) -> None:
@@ -376,6 +549,133 @@ def _handle_share(doc_controller: DocumentController) -> None:
         print(f"    Permission        : {result['permission']}")
     else:
         print(f"  ✗ {result['error']}")
+
+
+def _handle_audit_logs(audit_controller: AuditController) -> None:
+    """View recent audit logs."""
+    print()
+    print("  --- Audit Logs ---")
+    print()
+
+    page: int = 1
+    per_page: int = 20
+
+    while True:
+        result = audit_controller.view_audit_logs(page=page, per_page=per_page)
+
+        if not result.get("success"):
+            print(f"  ✗ {result['error']}")
+            return
+
+        logs = result.get("logs", [])
+
+        if not logs:
+            print("  No audit logs found.")
+            return
+
+        current_page: int = result.get("page", 1)
+        total_pages: int = result.get("total_pages", 1)
+        total: int = result.get("total", 0)
+        has_next: bool = result.get("has_next", False)
+        print(
+            f"  Page {current_page}/{total_pages}"
+            f"  ({total} log{'s' if total != 1 else ''})"
+        )
+        print()
+        print(
+            f"  {'TIMESTAMP':<20} {'USER':<12} {'ACTION':<22} "
+            f"{'SEVERITY':<10} {'STATUS':<10} RESOURCE"
+        )
+        print(f"  {'-'*80}")
+
+        for log in logs:
+            ts: str = log.get("timestamp", "")
+            if hasattr(ts, "strftime"):
+                ts = ts.strftime("%Y-%m-%d %H:%M")
+            else:
+                ts = str(ts)[:16]
+            username: str = log.get("username", "-")[:12]
+            action: str = log.get("action", "")[:22]
+            severity: str = log.get("severity", "")[:10]
+            status: str = log.get("status", "")[:10]
+            resource: str = log.get("resource_name", log.get("resource_id", ""))[:30]
+            print(
+                f"  {ts:<20} {username:<12} {action:<22} "
+                f"{severity:<10} {status:<10} {resource}"
+            )
+
+        print()
+        if has_next:
+            choice: str = input(
+                "  [N]ext page, [Q]uit to menu: "
+            ).strip().lower()
+            if choice == "n":
+                page += 1
+                continue
+        break
+
+
+def _handle_audit_search(audit_controller: AuditController) -> None:
+    """Search audit logs with filters."""
+    print()
+    print("  --- Search Audit Logs ---")
+    print("  Leave fields empty to skip filters.")
+    print()
+
+    username: str = input("  Username    : ").strip()
+    action: str = input("  Action      : ").strip().upper()
+    severity: str = input(
+        "  Severity (INFO, WARNING, SECURITY_ALERT, CRITICAL): "
+    ).strip().upper()
+    resource_type: str = input(
+        "  Resource type (USER, DOCUMENT, SESSION, SHARING, SYSTEM, AUDIT_LOG): "
+    ).strip().upper()
+    status: str = input(
+        "  Status (SUCCESS, FAILURE, DENIED, ERROR): "
+    ).strip().upper()
+    date_from: str = input("  Date from (YYYY-MM-DD): ").strip()
+    date_to: str = input("  Date to (YYYY-MM-DD): ").strip()
+
+    print()
+    print("  Searching audit logs ...")
+    result = audit_controller.view_audit_logs(
+        username=username if username else None,
+        action=action if action else None,
+        severity=severity if severity else None,
+        resource_type=resource_type if resource_type else None,
+        status=status if status else None,
+        date_from=date_from if date_from else None,
+        date_to=date_to if date_to else None,
+        page=1,
+        per_page=50,
+    )
+
+    print()
+    if not result.get("success"):
+        print(f"  ✗ {result['error']}")
+        return
+
+    logs = result.get("logs", [])
+
+    if not logs:
+        print("  No audit logs match your search.")
+        return
+
+    current_page: int = result.get("page", 1)
+    total_pages: int = result.get("total_pages", 1)
+    total: int = result.get("total", 0)
+    print(
+        f"  Found {total} log{'s' if total != 1 else ''}"
+        f" (page {current_page}/{total_pages})"
+    )
+    print()
+    for log in logs:
+        print(f"  [{log.get('timestamp', '')}] "
+              f"{log.get('username', '-')} | "
+              f"{log.get('action', '')} | "
+              f"{log.get('severity', '')} | "
+              f"{log.get('status', '')} | "
+              f"{log.get('message', '')}")
 
 
 def _handle_shared_documents(doc_controller: DocumentController) -> None:

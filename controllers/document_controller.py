@@ -18,6 +18,8 @@ from exceptions.custom_exceptions import (
     ValidationError,
 )
 from logger.logging_config import get_logger
+from models.audit import AuditAction, OperationStatus, ResourceType, SeverityLevel
+from services.audit_service import AuditService
 from services.document_download_service import DocumentDownloadService
 from services.document_listing_service import DocumentListingService
 from services.document_service import DocumentUploadService
@@ -43,6 +45,7 @@ class DocumentController:
         self._listing_service: DocumentListingService = DocumentListingService()
         self._download_service: DocumentDownloadService = DocumentDownloadService()
         self._sharing_service: DocumentSharingService = DocumentSharingService()
+        self._audit_service: AuditService = AuditService()
 
     # ------------------------------------------------------------------
     # Upload
@@ -67,6 +70,20 @@ class DocumentController:
         """
         try:
             result = self._upload_service.upload(file_path)
+            self._audit_service.log_event(
+                action=AuditAction.DOCUMENT_UPLOAD.value,
+                resource_type=ResourceType.DOCUMENT.value,
+                resource_id=result["document_id"],
+                resource_name=result["original_filename"],
+                status=OperationStatus.SUCCESS.value,
+                message=f"Document '{result['original_filename']}' uploaded ({result['file_size']} bytes, SHA-256: {result['sha256_hash'][:16]}...).",
+                severity=SeverityLevel.INFO.value,
+                metadata={
+                    "file_size": result["file_size"],
+                    "mime_type": result.get("mime_type", ""),
+                    "sha256_prefix": result["sha256_hash"][:16],
+                },
+            )
             return {
                 "success": True,
                 **result,
@@ -260,6 +277,23 @@ class DocumentController:
             result = self._download_service.download(
                 document_id=document_id, output_dir=output_dir
             )
+            self._audit_service.log_event(
+                action=AuditAction.DOCUMENT_DOWNLOAD.value,
+                resource_type=ResourceType.DOCUMENT.value,
+                resource_id=result["document_id"],
+                resource_name=result["original_filename"],
+                status=OperationStatus.SUCCESS.value,
+                message=(
+                    f"Document '{result['original_filename']}' "
+                    f"downloaded and integrity verified."
+                ),
+                severity=SeverityLevel.INFO.value,
+                metadata={
+                    "output_path": result["output_path"],
+                    "file_size": result["file_size"],
+                    "integrity_verified": result.get("integrity_verified", False),
+                },
+            )
             return {
                 "success": True,
                 **result,
@@ -285,6 +319,19 @@ class DocumentController:
             }
         except IntegrityCheckError as exc:
             logger.error("Download integrity failure: %s", exc)
+            self._audit_service.log_event(
+                action=AuditAction.INTEGRITY_FAILURE.value,
+                resource_type=ResourceType.DOCUMENT.value,
+                resource_id=document_id,
+                resource_name="",
+                status=OperationStatus.FAILURE.value,
+                message=(
+                    f"Integrity verification failed for "
+                    f"document '{document_id}': {exc}"
+                ),
+                severity=SeverityLevel.CRITICAL.value,
+                metadata={"document_id": document_id},
+            )
             return {"success": False, "error": str(exc)}
         except SDMSException as exc:
             logger.error("Download failed: %s", exc)
@@ -319,6 +366,22 @@ class DocumentController:
                 document_id=document_id,
                 recipient_username=recipient_username,
             )
+            self._audit_service.log_event(
+                action=AuditAction.DOCUMENT_SHARE.value,
+                resource_type=ResourceType.SHARING.value,
+                resource_id=result["document_id"],
+                resource_name=result["recipient_username"],
+                status=OperationStatus.SUCCESS.value,
+                message=(
+                    f"Document '{result['document_id']}' "
+                    f"shared with user '{result['recipient_username']}'."
+                ),
+                severity=SeverityLevel.INFO.value,
+                metadata={
+                    "recipient_user_id": result.get("recipient_user_id", ""),
+                    "permission": result.get("permission", "view"),
+                },
+            )
             return {
                 "success": True,
                 **result,
@@ -332,9 +395,27 @@ class DocumentController:
             return {"success": False, "error": str(exc)}
         except ValidationError as exc:
             logger.warning("Share validation failed: %s", exc)
+            self._audit_service.log_event(
+                action=AuditAction.DOCUMENT_SHARE.value,
+                resource_type=ResourceType.SHARING.value,
+                resource_id=document_id,
+                resource_name=recipient_username,
+                status=OperationStatus.FAILURE.value,
+                message=f"Share validation failed: {exc}",
+                severity=SeverityLevel.WARNING.value,
+            )
             return {"success": False, "error": str(exc)}
         except (DocumentNotFoundError, UserNotFoundError) as exc:
             logger.warning("Share failed: %s", exc)
+            self._audit_service.log_event(
+                action=AuditAction.DOCUMENT_SHARE.value,
+                resource_type=ResourceType.SHARING.value,
+                resource_id=document_id,
+                resource_name=recipient_username,
+                status=OperationStatus.FAILURE.value,
+                message=f"Share failed: {exc}",
+                severity=SeverityLevel.WARNING.value,
+            )
             return {"success": False, "error": str(exc)}
         except SDMSException as exc:
             logger.error("Share failed: %s", exc)

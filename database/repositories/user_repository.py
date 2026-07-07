@@ -219,3 +219,59 @@ class UserRepository(BaseRepository):
             sort=[("created_at", pymongo.DESCENDING)],
         )
         return [User.from_dict(d) for d in docs]
+
+    # ------------------------------------------------------------------
+    # Biometric helpers
+    # ------------------------------------------------------------------
+
+    def get_enrolled_users(self) -> list[User]:
+        """Retrieve all users who have enrolled facial biometrics.
+
+        Returns:
+            A list of User instances with face_enrolled == True.
+        """
+        docs = self.find(
+            filters={"face_enrolled": True},
+            limit=0,
+            sort=[("created_at", pymongo.DESCENDING)],
+        )
+        return [User.from_dict(d) for d in docs]
+
+    def update_face_encoding(
+        self,
+        user_id: str,
+        encoding: list[float],
+    ) -> User:
+        """Store a facial encoding and mark the user as enrolled.
+
+        Args:
+            user_id:  The target user's identifier.
+            encoding: The 128-dimensional face encoding as a float list.
+
+        Returns:
+            The updated User instance.
+        """
+        return self.update_user(
+            user_id,
+            {
+                "face_encoding": encoding,
+                "face_enrolled": True,
+            },
+        )
+
+    def remove_face_encoding(self, user_id: str) -> User:
+        """Clear the facial encoding and mark as not enrolled.
+
+        Args:
+            user_id: The target user's identifier.
+
+        Returns:
+            The updated User instance.
+        """
+        return self.update_user(
+            user_id,
+            {
+                "face_encoding": [],
+                "face_enrolled": False,
+            },
+        )

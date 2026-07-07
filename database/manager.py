@@ -160,6 +160,7 @@ class DatabaseManager:
         try:
             users: Collection = self.get_collection("users")
             documents: Collection = self.get_collection("documents")
+            audit_logs: Collection = self.get_collection("audit_logs")
 
             # Users indexes
             users.create_index("user_id", unique=True, name="idx_user_id")
@@ -168,6 +169,9 @@ class DatabaseManager:
             )
             users.create_index("role", name="idx_user_role")
             users.create_index("is_active", name="idx_user_is_active")
+            users.create_index(
+                "face_enrolled", name="idx_user_face_enrolled"
+            )
 
             # Documents indexes
             documents.create_index(
@@ -185,6 +189,35 @@ class DatabaseManager:
                 name="idx_doc_shared_with",
             )
             documents.create_index("is_deleted", name="idx_doc_is_deleted")
+
+            # Audit logs indexes
+            audit_logs.create_index(
+                "audit_id", unique=True, name="idx_audit_id"
+            )
+            audit_logs.create_index(
+                "timestamp", name="idx_audit_timestamp"
+            )
+            audit_logs.create_index(
+                "username", name="idx_audit_username"
+            )
+            audit_logs.create_index(
+                "action", name="idx_audit_action"
+            )
+            audit_logs.create_index(
+                "severity", name="idx_audit_severity"
+            )
+            audit_logs.create_index(
+                "resource_type", name="idx_audit_resource_type"
+            )
+            audit_logs.create_index(
+                "resource_id", name="idx_audit_resource_id"
+            )
+            audit_logs.create_index(
+                "status", name="idx_audit_status"
+            )
+            audit_logs.create_index(
+                "user_id", name="idx_audit_user_id"
+            )
 
             logger.info("All database indexes created / verified.")
         except OperationFailure as exc:

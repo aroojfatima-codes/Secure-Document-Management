@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, ClassVar
 
+from crypto.key_generator import generate_crypto_id
 from exceptions.custom_exceptions import AuthenticationError
 from logger.logging_config import get_logger
 
@@ -22,6 +23,7 @@ class Session:
     """Represents an authenticated user session.
 
     Attributes:
+        session_id:      Unique session identifier.
         user_id:         Unique user identifier.
         username:        Login name.
         role:            RBAC role.
@@ -30,11 +32,12 @@ class Session:
         login_timestamp: When the session was created.
     """
 
-    user_id: str
-    username: str
-    role: str
-    rsa_public_key: str
-    rsa_private_key: str
+    session_id: str = ""
+    user_id: str = ""
+    username: str = ""
+    role: str = ""
+    rsa_public_key: str = ""
+    rsa_private_key: str = ""
     login_timestamp: datetime = field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
@@ -42,6 +45,7 @@ class Session:
     def to_dict(self) -> dict[str, Any]:
         """Return session data as a plain dict (safe for logging)."""
         return {
+            "session_id": self.session_id,
             "user_id": self.user_id,
             "username": self.username,
             "role": self.role,
@@ -103,7 +107,9 @@ class SessionManager:
                 "Cannot create session — missing user identity."
             )
 
+        session_id: str = generate_crypto_id()
         self._session = Session(
+            session_id=session_id,
             user_id=user_id,
             username=username,
             role=role,

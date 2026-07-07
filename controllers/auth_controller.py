@@ -17,6 +17,8 @@ from exceptions.custom_exceptions import (
     ValidationError,
 )
 from logger.logging_config import get_logger
+from models.audit import AuditAction, OperationStatus, ResourceType, SeverityLevel
+from services.audit_service import AuditService
 from services.auth_service import AuthService
 from services.registration_service import RegistrationService
 
@@ -37,6 +39,7 @@ class AuthController:
     def __init__(self) -> None:
         self._registration_service: RegistrationService = RegistrationService()
         self._auth_service: AuthService = AuthService()
+        self._audit_service: AuditService = AuditService()
 
     # ------------------------------------------------------------------
     # Registration
@@ -68,6 +71,15 @@ class AuthController:
                 username=username.strip(),
                 password=password,
                 role=role.strip().lower(),
+            )
+            self._audit_service.log_event(
+                action=AuditAction.USER_REGISTRATION.value,
+                resource_type=ResourceType.USER.value,
+                resource_id=result["user_id"],
+                resource_name=result["username"],
+                status=OperationStatus.SUCCESS.value,
+                message=f"User '{result['username']}' registered successfully with role '{result['role']}'.",
+                severity=SeverityLevel.INFO.value,
             )
             return {
                 "success": True,
@@ -114,6 +126,15 @@ class AuthController:
             result = self._auth_service.login(
                 username=username.strip(), password=password
             )
+            self._audit_service.log_event(
+                action=AuditAction.USER_LOGIN.value,
+                resource_type=ResourceType.SESSION.value,
+                resource_id=result["user_id"],
+                resource_name=result["username"],
+                status=OperationStatus.SUCCESS.value,
+                message=f"User '{result['username']}' logged in successfully.",
+                severity=SeverityLevel.INFO.value,
+            )
             return {
                 "success": True,
                 **result,
@@ -123,9 +144,27 @@ class AuthController:
             }
         except ValidationError as exc:
             logger.warning("Login validation failed: %s", exc)
+            self._audit_service.log_event(
+                action=AuditAction.USER_LOGIN_FAILED.value,
+                resource_type=ResourceType.SESSION.value,
+                resource_id="",
+                resource_name=username.strip(),
+                status=OperationStatus.FAILURE.value,
+                message=f"Login validation failed for '{username.strip()}': {exc}",
+                severity=SeverityLevel.WARNING.value,
+            )
             return {"success": False, "error": str(exc)}
         except AuthenticationError as exc:
             logger.warning("Authentication failed: %s", exc)
+            self._audit_service.log_event(
+                action=AuditAction.USER_LOGIN_FAILED.value,
+                resource_type=ResourceType.SESSION.value,
+                resource_id="",
+                resource_name=username.strip(),
+                status=OperationStatus.FAILURE.value,
+                message=f"Authentication failed for '{username.strip()}': {exc}",
+                severity=SeverityLevel.WARNING.value,
+            )
             return {"success": False, "error": str(exc)}
         except SDMSException as exc:
             logger.error("Login failed due to system error: %s", exc)
@@ -145,7 +184,19 @@ class AuthController:
             A dict indicating the result.
         """
         try:
-            return self._auth_service.logout()
+            session = self._auth_service.get_current_user()
+            result = self._auth_service.logout()
+            if result.get("success") and session:
+                self._audit_service.log_event(
+                    action=AuditAction.USER_LOGOUT.value,
+                    resource_type=ResourceType.SESSION.value,
+                    resource_id=session.get("user_id", ""),
+                    resource_name=session.get("username", ""),
+                    status=OperationStatus.SUCCESS.value,
+                    message=f"User '{session.get('username', '')}' logged out.",
+                    severity=SeverityLevel.INFO.value,
+                )
+            return result
         except SDMSException as exc:
             logger.error("Logout failed: %s", exc)
             return {"success": False, "error": f"Logout failed: {exc}"}
