@@ -17,11 +17,38 @@ from logger.logging_config import get_logger
 
 logger = get_logger(__name__)
 
-WELCOME_ART = r"""
-   ======================================================
-        Secure Document Management System  v1.0.0
-                 Information Security
-   ======================================================
+# ANSI color codes for improved CLI UX
+class _C:
+    GREEN = "\033[92m"
+    RED = "\033[91m"
+    YELLOW = "\033[93m"
+    CYAN = "\033[96m"
+    BOLD = "\033[1m"
+    DIM = "\033[2m"
+    RESET = "\033[0m"
+
+
+def _ok(msg: str) -> str:
+    return f"{_C.GREEN}✓ {msg}{_C.RESET}"
+
+
+def _err(msg: str) -> str:
+    return f"{_C.RED}✗ {msg}{_C.RESET}"
+
+
+def _info(msg: str) -> str:
+    return f"{_C.CYAN}{msg}{_C.RESET}"
+
+
+def _bold(msg: str) -> str:
+    return f"{_C.BOLD}{msg}{_C.RESET}"
+
+
+WELCOME_ART = rf"""
+{_C.CYAN}{_C.BOLD}   +==================================================+
+   |       Secure Document Management System  v1.0.0       |
+   |                Information Security                    |
+   +==================================================+{_C.RESET}
 """
 
 
@@ -58,7 +85,7 @@ def run_cli() -> None:
         if choice in ("0", "exit", "quit"):
             if controller.is_authenticated():
                 controller.logout()
-            print("  Goodbye.")
+            print(f"  {_ok('Goodbye.')}")
             logger.info("CLI session ended by user.")
             break
         elif choice == "1":
@@ -95,38 +122,41 @@ def run_cli() -> None:
 
 def _print_menu(controller: AuthController) -> None:
     """Print the appropriate menu based on authentication state."""
-    print("  ┌─────────────────────────────────────┐")
+    sep: str = f"  {_C.DIM}+{'-'*37}+{_C.RESET}"
+    title_sep: str = f"  {_C.CYAN}+{'-'*37}+{_C.RESET}"
+    print(sep)
     if controller.is_authenticated():
         user = controller.get_current_user()
         is_admin: bool = user is not None and user.get("role") == "admin"
-        print(
-            f"  │  Logged in as {user['username']:<20}│"
+        status_line = (
+            f"  |  {_C.GREEN}Logged in as {user['username']:<18}{_C.RESET}|"
             if user
-            else "  │  Logged in                              │"
+            else f"  |  Logged in                              |"
         )
-        print("  ├─────────────────────────────────────┤")
-        print("  │  [3] Logout                           │")
-        print("  │  [4] Upload Document                  │")
-        print("  │  [5] My Documents                     │")
-        print("  │  [6] Document Details                 │")
-        print("  │  [7] Search Documents                 │")
-        print("  │  [8] Download Document                │")
-        print("  │  [9] Share Document                    │")
-        print("  │  [10] Shared With Me                   │")
+        print(status_line)
+        print(title_sep)
+        print(f"  |  {_C.BOLD}[3]{_C.RESET} Logout                           |")
+        print(f"  |  {_C.BOLD}[4]{_C.RESET} Upload Document                  |")
+        print(f"  |  {_C.BOLD}[5]{_C.RESET} My Documents                     |")
+        print(f"  |  {_C.BOLD}[6]{_C.RESET} Document Details                 |")
+        print(f"  |  {_C.BOLD}[7]{_C.RESET} Search Documents                 |")
+        print(f"  |  {_C.BOLD}[8]{_C.RESET} Download Document                |")
+        print(f"  |  {_C.BOLD}[9]{_C.RESET} Share Document                    |")
+        print(f"  |  {_C.BOLD}[10]{_C.RESET} Shared With Me                   |")
         if is_admin:
-            print("  ├─────────────────────────────────────┤")
-            print("  │  [11] View Audit Logs                 │")
-            print("  │  [12] Search Audit Logs               │")
-        print("  ├─────────────────────────────────────┤")
-        print("  │  [13] Face Settings                    │")
+            print(title_sep)
+            print(f"  |  {_C.BOLD}[11]{_C.RESET} View Audit Logs                 |")
+            print(f"  |  {_C.BOLD}[12]{_C.RESET} Search Audit Logs               |")
+        print(title_sep)
+        print(f"  |  {_C.BOLD}[13]{_C.RESET} Face Settings                    |")
     else:
-        print("  │  Main Menu                            │")
-        print("  ├─────────────────────────────────────┤")
-        print("  │  [1] Register                         │")
-        print("  │  [2] Login (Password)                  │")
-        print("  │  [3] Login (Face Recognition)          │")
-    print("  │  [0] Exit                              │")
-    print("  └─────────────────────────────────────┘")
+        print(f"  |  {_C.CYAN}Main Menu{_C.RESET}                         |")
+        print(title_sep)
+        print(f"  |  {_C.BOLD}[1]{_C.RESET} Register                         |")
+        print(f"  |  {_C.BOLD}[2]{_C.RESET} Login (Password)                  |")
+        print(f"  |  {_C.BOLD}[3]{_C.RESET} Login (Face Recognition)          |")
+    print(f"  |  {_C.BOLD}[0]{_C.RESET} Exit                              |")
+    print(sep)
 
 
 def _handle_registration(
@@ -135,54 +165,49 @@ def _handle_registration(
 ) -> None:
     """Prompt for registration details and process them."""
     print()
-    print("  --- User Registration ---")
+    print(f"  {_bold('--- User Registration ---')}")
     print()
 
     if controller.is_authenticated():
-        print("  You are already logged in.")
+        print(f"  {_err('You are already logged in.')}")
         return
 
+    print(f"  {_info('Username may contain spaces (automatically converted to underscores).')}")
     username: str = input("  Username        : ").strip()
     if not username:
-        print("  Registration cancelled — username is required.")
+        print(f"  {_err('Registration cancelled — username is required.')}")
         return
 
     password: str = input("  Password        : ")
 
     print()
-    print("  Available roles: admin, editor, viewer")
+    print(f"  {_info('Available roles: admin, editor, viewer')}")
     role: str = input("  Role            : ").strip().lower()
     if not role:
-        print("  Registration cancelled — role is required.")
+        print(f"  {_err('Registration cancelled — role is required.')}")
         return
 
     print()
-    print("  Processing registration ...")
+    print(f"  {_info('Processing registration ...')}")
     result: dict[str, Any] = controller.register(
         username=username, password=password, role=role
     )
 
     print()
     if result.get("success"):
-        print(f"  ✓ {result['message']}")
-        print(f"    User ID   : {result['user_id']}")
-        print(f"    Username  : {result['username']}")
-        print(f"    Role      : {result['role']}")
+        print(f"  {_ok(result['message'])}")
+        print(f"    {_bold('User ID')}   : {result['user_id']}")
+        print(f"    {_bold('Username')}  : {result['username']}")
+        print(f"    {_bold('Role')}      : {result['role']}")
 
         print()
-        print("  --- Optional Face Recognition ---")
+        print(f"  {_bold('--- Optional Face Recognition ---')}")
         if not face_controller.is_available():
-            print(
-                "  Face recognition libraries not available. "
-                "Skipping enrollment."
-            )
-            print(
-                "  Install opencv-python and face_recognition "
-                "to enable this feature."
-            )
+            print(f"  {_err('Face recognition is not available.')}")
+            print(f"  {_info('OpenCV face detection could not be initialised.')}")
         else:
             choice: str = input(
-                "  Enable Face Recognition Authentication? (y/n): "
+                f"  {_info('Enable Face Recognition Authentication? (y/n): ')}"
             ).strip().lower()
             if choice == "y":
                 _handle_face_enrollment(
@@ -192,62 +217,58 @@ def _handle_registration(
                 )
             else:
                 print(
-                    "  Face recognition not enabled. "
-                    "You can enable it later via [13] Face Settings."
+                    f"  {_info('Face recognition not enabled.')} "
+                    f"{_info('You can enable it later via [13] Face Settings.')}"
                 )
     else:
-        print(f"  ✗ {result['error']}")
+        print(f"  {_err(result['error'])}")
 
 
 def _handle_login(controller: AuthController) -> None:
     """Prompt for login credentials and authenticate."""
     print()
-    print("  --- User Login ---")
+    print(f"  {_bold('--- User Login ---')}")
     print()
 
     username: str = input("  Username  : ").strip()
     if not username:
-        print("  Login cancelled — username is required.")
+        print(f"  {_err('Login cancelled — username is required.')}")
         return
 
     password: str = input("  Password  : ")
 
     print()
-    print("  Authenticating ...")
+    print(f"  {_info('Authenticating ...')}")
     result: dict[str, Any] = controller.login(
         username=username, password=password
     )
 
     print()
     if result.get("success"):
-        print(f"  ✓ {result['message']}")
+        print(f"  {_ok(result['message'])}")
     else:
-        print(f"  ✗ {result['error']}")
+        print(f"  {_err(result['error'])}")
 
 
 def _handle_face_login(face_controller: FaceController) -> None:
     """Prompt for face recognition login."""
     print()
-    print("  --- Face Recognition Login ---")
+    print(f"  {_bold('--- Face Recognition Login ---')}")
     print()
 
     if not face_controller.is_available():
-        print(
-            "  Face recognition libraries are not installed."
-        )
-        print(
-            "  Use [2] Login (Password) instead."
-        )
+        print(f"  {_err('Face recognition is not available.')}")
+        print(f"  {_info('Use [2] Login (Password) instead.')}")
         return
 
-    print("  Looking at camera...")
+    print(f"  {_info('Looking at camera...')}")
     result: dict[str, Any] = face_controller.login_face()
 
     print()
     if result.get("success"):
-        print(f"  ✓ {result['message']}")
+        print(f"  {_ok(result['message'])}")
     else:
-        print(f"  ✗ {result['error']}")
+        print(f"  {_err(result['error'])}")
 
 
 def _handle_face_enrollment(
@@ -257,28 +278,26 @@ def _handle_face_enrollment(
 ) -> None:
     """Run the face enrollment workflow."""
     print()
-    print("  --- Face Enrollment ---")
+    print(f"  {_bold('--- Face Enrollment ---')}")
     print()
 
     if not face_controller.is_available():
-        print(
-            "  Face recognition libraries are not installed."
-        )
+        print(f"  {_err('Face recognition is not available.')}")
         return
 
-    print("  You will be asked to capture several facial images.")
-    print("  Ensure good lighting and look directly at the camera.")
+    print(f"  {_info('You will be asked to capture several facial images.')}")
+    print(f"  {_info('Ensure good lighting and look directly at the camera.')}")
     print()
 
-    input("  Press Enter to start enrollment...")
+    input(f"  {_bold('Press Enter')} to start enrollment...")
 
     result: dict[str, Any] = face_controller.enroll(user_id, username)
 
     print()
     if result.get("success"):
-        print(f"  ✓ {result['message']}")
+        print(f"  {_ok(result['message'])}")
     else:
-        print(f"  ✗ {result['error']}")
+        print(f"  {_err(result['error'])}")
 
 
 def _handle_face_settings(
@@ -287,18 +306,16 @@ def _handle_face_settings(
 ) -> None:
     """Manage face recognition settings for the current user."""
     print()
-    print("  --- Face Recognition Settings ---")
+    print(f"  {_bold('--- Face Recognition Settings ---')}")
     print()
 
     if not face_controller.is_available():
-        print(
-            "  Face recognition libraries are not installed."
-        )
+        print(f"  {_err('Face recognition is not available.')}")
         return
 
     user = controller.get_current_user()
     if not user:
-        print("  Could not retrieve user information.")
+        print(f"  {_err('Could not retrieve user information.')}")
         return
 
     user_id: str = user["user_id"]
@@ -306,11 +323,11 @@ def _handle_face_settings(
     enrolled: bool = face_controller.is_enrolled(user_id)
 
     if enrolled:
-        print(f"  Status: Face recognition is ENABLED for '{username}'.")
+        print(f"  {_ok('Status: Face recognition is ENABLED')} for '{username}'.")
         print()
-        print("  [1] Re-enroll Face Data")
-        print("  [2] Remove Face Enrollment")
-        print("  [0] Back to Main Menu")
+        print(f"  {_bold('[1]')} Re-enroll Face Data")
+        print(f"  {_bold('[2]')} Remove Face Enrollment")
+        print(f"  {_bold('[0]')} Back to Main Menu")
         print()
 
         choice: str = input("  Enter your choice: ").strip()
@@ -319,27 +336,27 @@ def _handle_face_settings(
             _handle_face_enrollment(face_controller, user_id, username)
         elif choice == "2":
             confirm: str = input(
-                "  Are you sure? This will remove your facial data. (y/n): "
+                f"  {_err('Are you sure?')} This will remove your facial data. (y/n): "
             ).strip().lower()
             if confirm == "y":
                 result = face_controller.remove_enrollment(user_id, username)
                 print()
                 if result.get("success"):
-                    print(f"  ✓ {result['message']}")
+                    print(f"  {_ok(result['message'])}")
                 else:
-                    print(f"  ✗ {result['error']}")
+                    print(f"  {_err(result['error'])}")
             else:
-                print("  Removal cancelled.")
+                print(f"  {_info('Removal cancelled.')}")
     else:
-        print(f"  Status: Face recognition is DISABLED for '{username}'.")
+        print(f"  Status: Face recognition is {_err('DISABLED')} for '{username}'.")
         print()
         choice = input(
-            "  Enable Face Recognition Authentication? (y/n): "
+            f"  {_info('Enable Face Recognition Authentication? (y/n): ')}"
         ).strip().lower()
         if choice == "y":
             _handle_face_enrollment(face_controller, user_id, username)
         else:
-            print("  Face recognition not enabled.")
+            print(f"  {_info('Face recognition not enabled.')}")
 
 
 def _handle_logout(controller: AuthController) -> None:
@@ -347,9 +364,9 @@ def _handle_logout(controller: AuthController) -> None:
     result: dict[str, Any] = controller.logout()
     print()
     if result.get("success"):
-        print(f"  ✓ {result['message']}")
+        print(f"  {_ok(result['message'])}")
     else:
-        print(f"  ✗ {result['error']}")
+        print(f"  {_err(result['error'])}")
 
 
 def _print_document_summary(doc: dict[str, Any], index: int | None = None) -> None:
@@ -369,7 +386,7 @@ def _print_document_summary(doc: dict[str, Any], index: int | None = None) -> No
 def _handle_list_documents(doc_controller: DocumentController) -> None:
     """List all documents owned by the current user."""
     print()
-    print("  --- My Documents ---")
+    print(f"  {_bold('--- My Documents ---')}")
     print()
 
     page: int = 1
@@ -377,7 +394,7 @@ def _handle_list_documents(doc_controller: DocumentController) -> None:
         result = doc_controller.list_my_documents(page=page)
 
         if not result.get("success"):
-            print(f"  ✗ {result['error']}")
+            print(f"  {_err(result['error'])}")
             return
 
         documents = result.get("documents", [])
@@ -385,14 +402,14 @@ def _handle_list_documents(doc_controller: DocumentController) -> None:
 
         if not documents:
             if page == 1:
-                print("  No documents found. Upload your first document using [4].")
+                print(f"  {_info('No documents found. Upload your first document using [4].')}")
             else:
-                print("  No more documents.")
+                print(f"  {_info('No more documents.')}")
             return
 
         total = pagination.get("total", 0)
         print(
-            f"  Page {pagination['page']}/{pagination['total_pages']}"
+            f"  {_bold(f'Page {pagination['page']}/{pagination['total_pages']}')}"
             f"  ({total} document{'s' if total != 1 else ''})"
         )
         print()
@@ -403,7 +420,7 @@ def _handle_list_documents(doc_controller: DocumentController) -> None:
         print()
         if pagination.get("has_next"):
             choice: str = input(
-                "  [N]ext page, [Q]uit to menu: "
+                f"  {_info('[N]ext page, [Q]uit to menu: ')}"
             ).strip().lower()
             if choice == "n":
                 page += 1
@@ -414,49 +431,49 @@ def _handle_list_documents(doc_controller: DocumentController) -> None:
 def _handle_document_detail(doc_controller: DocumentController) -> None:
     """Show full metadata for a single document."""
     print()
-    print("  --- Document Details ---")
+    print(f"  {_bold('--- Document Details ---')}")
     print()
 
     doc_id: str = input("  Document ID  : ").strip()
     if not doc_id:
-        print("  Cancelled — document ID is required.")
+        print(f"  {_err('Cancelled — document ID is required.')}")
         return
 
     print()
-    print("  Fetching details ...")
+    print(f"  {_info('Fetching details ...')}")
     result = doc_controller.get_document_detail(doc_id)
 
     print()
     if not result.get("success"):
-        print(f"  ✗ {result['error']}")
+        print(f"  {_err(result['error'])}")
         return
 
     doc = result["document"]
-    print(f"  Document ID      : {doc['document_id']}")
-    print(f"  Filename         : {doc['original_filename']}")
-    print(f"  Type             : {doc['mime_type']}")
-    print(f"  Size             : {doc['file_size_display']} ({doc['file_size']:,} bytes)")
-    print(f"  SHA-256          : {doc['sha256_hash']}")
-    print(f"  Owner ID         : {doc['owner_id']}")
-    print(f"  Status           : {doc['status']}")
-    print(f"  Shared with      : {doc['shared_with_count']} user(s)")
-    print(f"  Created          : {doc['created_at']}")
-    print(f"  Updated          : {doc['updated_at']}")
+    print(f"  {_bold('Document ID')}      : {doc['document_id']}")
+    print(f"  {_bold('Filename')}         : {doc['original_filename']}")
+    print(f"  {_bold('Type')}             : {doc['mime_type']}")
+    print(f"  {_bold('Size')}             : {doc['file_size_display']} ({doc['file_size']:,} bytes)")
+    print(f"  {_bold('SHA-256')}          : {doc['sha256_hash']}")
+    print(f"  {_bold('Owner ID')}         : {doc['owner_id']}")
+    print(f"  {_bold('Status')}           : {doc['status']}")
+    print(f"  {_bold('Shared with')}      : {doc['shared_with_count']} user(s)")
+    print(f"  {_bold('Created')}          : {doc['created_at']}")
+    print(f"  {_bold('Updated')}          : {doc['updated_at']}")
 
 
 def _handle_search_documents(doc_controller: DocumentController) -> None:
     """Search and filter documents owned by the current user."""
     print()
-    print("  --- Search Documents ---")
+    print(f"  {_bold('--- Search Documents ---')}")
     print()
-    print("  Leave fields empty to skip filters.")
+    print(f"  {_info('Leave fields empty to skip filters.')}")
     print()
 
     query: str = input("  Search term  : ").strip()
     mime_type: str = input("  MIME type    : ").strip()
 
     print()
-    print("  Searching ...")
+    print(f"  {_info('Searching ...')}")
     result = doc_controller.search_my_documents(
         query=query,
         mime_type=mime_type if mime_type else None,
@@ -464,19 +481,19 @@ def _handle_search_documents(doc_controller: DocumentController) -> None:
 
     print()
     if not result.get("success"):
-        print(f"  ✗ {result['error']}")
+        print(f"  {_err(result['error'])}")
         return
 
     documents = result.get("documents", [])
     pagination = result.get("pagination", {})
 
     if not documents:
-        print("  No documents match your search.")
+        print(f"  {_info('No documents match your search.')}")
         return
 
     total = pagination.get("total", 0)
     print(
-        f"  Found {total} document{'s' if total != 1 else ''}"
+        f"  {_ok(f'Found {total} document{'s' if total != 1 else ''}')}"
         f" (page {pagination['page']}/{pagination['total_pages']})"
     )
     print()
@@ -488,73 +505,73 @@ def _handle_search_documents(doc_controller: DocumentController) -> None:
 def _handle_download(doc_controller: DocumentController) -> None:
     """Prompt for document ID and output directory, then download."""
     print()
-    print("  --- Download Document ---")
+    print(f"  {_bold('--- Download Document ---')}")
     print()
 
     doc_id: str = input("  Document ID  : ").strip()
     if not doc_id:
-        print("  Download cancelled — document ID is required.")
+        print(f"  {_err('Download cancelled — document ID is required.')}")
         return
 
     output_dir: str = input("  Output dir   : ").strip()
     if not output_dir:
-        print("  Download cancelled — output directory is required.")
+        print(f"  {_err('Download cancelled — output directory is required.')}")
         return
 
     print()
-    print("  Downloading, decrypting, and verifying integrity ...")
+    print(f"  {_info('Downloading, decrypting, and verifying integrity ...')}")
     result = doc_controller.download(
         document_id=doc_id, output_dir=output_dir
     )
 
     print()
     if result.get("success"):
-        print(f"  ✓ {result['message']}")
-        print(f"    Document ID      : {result['document_id']}")
-        print(f"    File name        : {result['original_filename']}")
-        print(f"    Size             : {result['file_size']:,} bytes")
-        print(f"    Output path      : {result['output_path']}")
-        print("    Integrity        : Verified (SHA-256)")
+        print(f"  {_ok(result['message'])}")
+        print(f"    {_bold('Document ID')}      : {result['document_id']}")
+        print(f"    {_bold('File name')}        : {result['original_filename']}")
+        print(f"    {_bold('Size')}             : {result['file_size']:,} bytes")
+        print(f"    {_bold('Output path')}      : {result['output_path']}")
+        print(f"    {_bold('Integrity')}        : {_ok('Verified (SHA-256)')}")
     else:
-        print(f"  ✗ {result['error']}")
+        print(f"  {_err(result['error'])}")
 
 
 def _handle_share(doc_controller: DocumentController) -> None:
     """Prompt for document ID and recipient username, then share."""
     print()
-    print("  --- Share Document ---")
+    print(f"  {_bold('--- Share Document ---')}")
     print()
 
     doc_id: str = input("  Document ID       : ").strip()
     if not doc_id:
-        print("  Share cancelled — document ID is required.")
+        print(f"  {_err('Share cancelled — document ID is required.')}")
         return
 
     recipient: str = input("  Recipient username : ").strip()
     if not recipient:
-        print("  Share cancelled — recipient username is required.")
+        print(f"  {_err('Share cancelled — recipient username is required.')}")
         return
 
     print()
-    print("  Sharing document ...")
+    print(f"  {_info('Sharing document ...')}")
     result = doc_controller.share_document(
         document_id=doc_id, recipient_username=recipient
     )
 
     print()
     if result.get("success"):
-        print(f"  ✓ {result['message']}")
-        print(f"    Document ID       : {result['document_id']}")
-        print(f"    Recipient         : {result['recipient_username']}")
-        print(f"    Permission        : {result['permission']}")
+        print(f"  {_ok(result['message'])}")
+        print(f"    {_bold('Document ID')}       : {result['document_id']}")
+        print(f"    {_bold('Recipient')}         : {result['recipient_username']}")
+        print(f"    {_bold('Permission')}        : {result['permission']}")
     else:
-        print(f"  ✗ {result['error']}")
+        print(f"  {_err(result['error'])}")
 
 
 def _handle_audit_logs(audit_controller: AuditController) -> None:
     """View recent audit logs."""
     print()
-    print("  --- Audit Logs ---")
+    print(f"  {_bold('--- Audit Logs ---')}")
     print()
 
     page: int = 1
@@ -564,13 +581,13 @@ def _handle_audit_logs(audit_controller: AuditController) -> None:
         result = audit_controller.view_audit_logs(page=page, per_page=per_page)
 
         if not result.get("success"):
-            print(f"  ✗ {result['error']}")
+            print(f"  {_err(result['error'])}")
             return
 
         logs = result.get("logs", [])
 
         if not logs:
-            print("  No audit logs found.")
+            print(f"  {_info('No audit logs found.')}")
             return
 
         current_page: int = result.get("page", 1)
@@ -578,15 +595,15 @@ def _handle_audit_logs(audit_controller: AuditController) -> None:
         total: int = result.get("total", 0)
         has_next: bool = result.get("has_next", False)
         print(
-            f"  Page {current_page}/{total_pages}"
+            f"  {_bold(f'Page {current_page}/{total_pages}')}"
             f"  ({total} log{'s' if total != 1 else ''})"
         )
         print()
         print(
-            f"  {'TIMESTAMP':<20} {'USER':<12} {'ACTION':<22} "
-            f"{'SEVERITY':<10} {'STATUS':<10} RESOURCE"
+            f"  {_C.DIM}{'TIMESTAMP':<20} {'USER':<12} {'ACTION':<22} "
+            f"{'SEVERITY':<10} {'STATUS':<10} RESOURCE{_C.RESET}"
         )
-        print(f"  {'-'*80}")
+        print(f"  {_C.DIM}{'-'*80}{_C.RESET}")
 
         for log in logs:
             ts: str = log.get("timestamp", "")
@@ -607,7 +624,7 @@ def _handle_audit_logs(audit_controller: AuditController) -> None:
         print()
         if has_next:
             choice: str = input(
-                "  [N]ext page, [Q]uit to menu: "
+                f"  {_info('[N]ext page, [Q]uit to menu: ')}"
             ).strip().lower()
             if choice == "n":
                 page += 1
@@ -618,8 +635,8 @@ def _handle_audit_logs(audit_controller: AuditController) -> None:
 def _handle_audit_search(audit_controller: AuditController) -> None:
     """Search audit logs with filters."""
     print()
-    print("  --- Search Audit Logs ---")
-    print("  Leave fields empty to skip filters.")
+    print(f"  {_bold('--- Search Audit Logs ---')}")
+    print(f"  {_info('Leave fields empty to skip filters.')}")
     print()
 
     username: str = input("  Username    : ").strip()
@@ -637,7 +654,7 @@ def _handle_audit_search(audit_controller: AuditController) -> None:
     date_to: str = input("  Date to (YYYY-MM-DD): ").strip()
 
     print()
-    print("  Searching audit logs ...")
+    print(f"  {_info('Searching audit logs ...')}")
     result = audit_controller.view_audit_logs(
         username=username if username else None,
         action=action if action else None,
@@ -652,25 +669,25 @@ def _handle_audit_search(audit_controller: AuditController) -> None:
 
     print()
     if not result.get("success"):
-        print(f"  ✗ {result['error']}")
+        print(f"  {_err(result['error'])}")
         return
 
     logs = result.get("logs", [])
 
     if not logs:
-        print("  No audit logs match your search.")
+        print(f"  {_info('No audit logs match your search.')}")
         return
 
     current_page: int = result.get("page", 1)
     total_pages: int = result.get("total_pages", 1)
     total: int = result.get("total", 0)
     print(
-        f"  Found {total} log{'s' if total != 1 else ''}"
+        f"  {_ok(f'Found {total} log{'s' if total != 1 else ''}')}"
         f" (page {current_page}/{total_pages})"
     )
     print()
     for log in logs:
-        print(f"  [{log.get('timestamp', '')}] "
+        print(f"  {_C.DIM}[{log.get('timestamp', '')}]{_C.RESET} "
               f"{log.get('username', '-')} | "
               f"{log.get('action', '')} | "
               f"{log.get('severity', '')} | "
@@ -681,7 +698,7 @@ def _handle_audit_search(audit_controller: AuditController) -> None:
 def _handle_shared_documents(doc_controller: DocumentController) -> None:
     """List documents shared with the current user."""
     print()
-    print("  --- Shared With Me ---")
+    print(f"  {_bold('--- Shared With Me ---')}")
     print()
 
     page: int = 1
@@ -689,7 +706,7 @@ def _handle_shared_documents(doc_controller: DocumentController) -> None:
         result = doc_controller.list_shared_with_me(page=page)
 
         if not result.get("success"):
-            print(f"  ✗ {result['error']}")
+            print(f"  {_err(result['error'])}")
             return
 
         documents = result.get("documents", [])
@@ -697,14 +714,14 @@ def _handle_shared_documents(doc_controller: DocumentController) -> None:
 
         if not documents:
             if page == 1:
-                print("  No documents have been shared with you yet.")
+                print(f"  {_info('No documents have been shared with you yet.')}")
             else:
-                print("  No more documents.")
+                print(f"  {_info('No more documents.')}")
             return
 
         total = pagination.get("total", 0)
         print(
-            f"  Page {pagination['page']}/{pagination['total_pages']}"
+            f"  {_bold(f'Page {pagination['page']}/{pagination['total_pages']}')}"
             f"  ({total} document{'s' if total != 1 else ''})"
         )
         print()
@@ -715,7 +732,7 @@ def _handle_shared_documents(doc_controller: DocumentController) -> None:
         print()
         if pagination.get("has_next"):
             choice: str = input(
-                "  [N]ext page, [Q]uit to menu: "
+                f"  {_info('[N]ext page, [Q]uit to menu: ')}"
             ).strip().lower()
             if choice == "n":
                 page += 1
@@ -726,25 +743,25 @@ def _handle_shared_documents(doc_controller: DocumentController) -> None:
 def _handle_upload(doc_controller: DocumentController) -> None:
     """Prompt for file path and upload the document."""
     print()
-    print("  --- Upload Document ---")
+    print(f"  {_bold('--- Upload Document ---')}")
     print()
 
-    file_path: str = input("  File path  : ").strip()
+    file_path: str = input("  File path  : ").strip().strip("\"'")
     if not file_path:
-        print("  Upload cancelled — file path is required.")
+        print(f"  {_err('Upload cancelled — file path is required.')}")
         return
 
     print()
-    print("  Uploading and encrypting ...")
+    print(f"  {_info('Uploading and encrypting ...')}")
     result: dict[str, Any] = doc_controller.upload(file_path)
 
     print()
     if result.get("success"):
-        print(f"  ✓ {result['message']}")
-        print(f"    Document ID  : {result['document_id']}")
-        print(f"    File name    : {result['original_filename']}")
-        print(f"    Size         : {result['file_size']:,} bytes")
-        print(f"    MIME type    : {result['mime_type']}")
-        print(f"    SHA-256      : {result['sha256_hash']}")
+        print(f"  {_ok(result['message'])}")
+        print(f"    {_bold('Document ID')}  : {result['document_id']}")
+        print(f"    {_bold('File name')}    : {result['original_filename']}")
+        print(f"    {_bold('Size')}         : {result['file_size']:,} bytes")
+        print(f"    {_bold('MIME type')}    : {result['mime_type']}")
+        print(f"    {_bold('SHA-256')}      : {result['sha256_hash']}")
     else:
-        print(f"  ✗ {result['error']}")
+        print(f"  {_err(result['error'])}")

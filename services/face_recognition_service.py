@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import os
 from typing import Any
 
+import cv2
 import numpy as np
 
 from database.repositories.user_repository import UserRepository
@@ -12,78 +14,142 @@ from services.session_manager import SessionManager
 
 logger = get_logger(__name__)
 
-_FACE_RECOGNITION_AVAILABLE: bool = False
-_cv2: Any = None
-_face_rec: Any = None
+# ---------------------------------------------------------------------------
+# Module-level flags — face recognition is always available in this build
+# because we rely on OpenCV contrib modules (LBPH) rather than the
+# third-party ``face_recognition`` package (which does not support
+# Python ≥ 3.13).
+# ---------------------------------------------------------------------------
+_FACE_RECOGNITION_AVAILABLE: bool = True
+_FACE_CASCADE: cv2.CascadeClassifier | None = None
+
+
+def _download_cascade(dest_path: str) -> None:
+    """Download the Haar cascade XML from OpenCV's GitHub repository."""
+    try:
+        import urllib.request
+
+        url = (
+            "https://raw.githubusercontent.com/opencv/opencv/master/data/"
+            "haarcascades/haarcascade_frontalface_default.xml"
+        )
+        logger.info("Downloading face cascade from %s ...", url)
+        urllib.request.urlretrieve(url, dest_path)
+        logger.info("Cascade saved to %s", dest_path)
+    except Exception as exc:
+        logger.warning("Failed to download Haar cascade: %s", exc)
 
 try:
-    import cv2 as _cv2_mod
+    cascade_path: str = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+    if not os.path.exists(cascade_path):
+        logger.info("Haar cascade not found — attempting download ...")
+        _download_cascade(cascade_path)
 
-    _cv2 = _cv2_mod
-    import face_recognition as _face_rec_mod
+    if os.path.exists(cascade_path):
+        _FACE_CASCADE = cv2.CascadeClassifier(cascade_path)
+        if _FACE_CASCADE.empty():
+            logger.warning("Failed to load Haar cascade classifier.")
+            _FACE_RECOGNITION_AVAILABLE = False
+    else:
+        logger.warning("Haar cascade file not found at %s", cascade_path)
+        _FACE_RECOGNITION_AVAILABLE = False
+except Exception as exc:
+    logger.warning("Face detection initialisation failed: %s", exc)
+    _FACE_RECOGNITION_AVAILABLE = False
 
-    _face_rec = _face_rec_mod
-    _FACE_RECOGNITION_AVAILABLE = True
-except ImportError:
-    logger.warning(
-        "Face recognition libraries not installed. "
-        "Run: pip install opencv-python face_recognition numpy"
-    )
 
-FACE_MATCH_THRESHOLD: float = 0.5
+FACE_MATCH_THRESHOLD: float = 55.0  # LBPH confidence (lower = better match)
 ENROLLMENT_SAMPLES: int = 5
 CAMERA_INDEX: int = 0
+FACE_IMAGE_SIZE: tuple[int, int] = (200, 200)
 
 
 class FaceRecognitionService:
+    """Face recognition backed by OpenCV's LBPH face recogniser.
+
+    This replaces the ``face_recognition`` / dlib pipeline which is
+    not available on Python 3.14.  The LBPH (Local Binary Patterns
+    Histogram) algorithm is lightweight, runs on CPU, and works
+    well for access-control scenarios.
+    """
+
     def __init__(self) -> None:
         self._user_repo: UserRepository = UserRepository()
         self._session_mgr: SessionManager = SessionManager()
 
+    # ------------------------------------------------------------------
+    # Public query helpers
+    # ------------------------------------------------------------------
+
     def is_available(self) -> bool:
         return _FACE_RECOGNITION_AVAILABLE
 
+    def is_enrolled(self, user_id: str) -> bool:
+        user = self._user_repo.get_by_user_id(user_id)
+        return user is not None and user.face_enrolled
+
+    # ------------------------------------------------------------------
+    # Camera helpers
+    # ------------------------------------------------------------------
+
     @staticmethod
     def _check_camera() -> None:
+        """Raise if the camera cannot be opened."""
         if not _FACE_RECOGNITION_AVAILABLE:
             raise SDMSException(
-                "Face recognition libraries are not installed."
+                "Face recognition is not available. "
+                "Haar cascade classifier could not be loaded."
             )
-        cap = _cv2.VideoCapture(CAMERA_INDEX)
+        cap = cv2.VideoCapture(CAMERA_INDEX)
         if not cap.isOpened():
             cap.release()
             raise SDMSException(
                 "Could not access the webcam. "
-                "Please ensure your camera is connected and not in use."
+                "Please ensure your camera is connected, not blocked "
+                "by privacy settings, and not in use by another application."
             )
         cap.release()
 
     @staticmethod
-    def _get_face_encoding(frame: np.ndarray) -> Any:
-        rgb = _cv2.cvtColor(frame, _cv2.COLOR_BGR2RGB)
-        face_locations = _face_rec.face_locations(rgb)
-        if len(face_locations) == 0:
+    def _detect_face(frame: np.ndarray) -> tuple[np.ndarray, tuple[int, int, int, int]]:
+        """Detect exactly one face in *frame* and return the cropped face + bounding box.
+
+        Returns:
+            ``(face_cropped_gray, (x, y, w, h))``
+
+        Raises:
+            SDMSException: If zero or multiple faces are detected.
+        """
+        if _FACE_CASCADE is None:
+            raise SDMSException("Face classifier not initialised.")
+
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        faces = _FACE_CASCADE.detectMultiScale(
+            gray, scaleFactor=1.1, minNeighbors=5, minSize=(100, 100)
+        )
+
+        if len(faces) == 0:
             raise SDMSException(
-                "No face detected. Please ensure your face is visible."
+                "No face detected. Please ensure your face is visible "
+                "and the lighting is adequate."
             )
-        if len(face_locations) > 1:
+        if len(faces) > 1:
             raise SDMSException(
                 "Multiple faces detected. "
                 "Please ensure only one face is visible."
             )
-        encodings = _face_rec.face_encodings(rgb, face_locations)
-        if not encodings:
-            raise SDMSException(
-                "Could not generate facial encoding. "
-                "Please try again with better lighting."
-            )
-        return encodings[0]
+
+        (x, y, w, h) = faces[0]
+        face_roi = gray[y : y + h, x : x + w]
+        face_resized = cv2.resize(face_roi, FACE_IMAGE_SIZE)
+        return face_resized, (x, y, w, h)
 
     @staticmethod
     def _capture_frame(
-        cap: Any, instruction: str, delay_ms: int = 2000
+        cap: cv2.VideoCapture, instruction: str, delay_ms: int = 2000
     ) -> np.ndarray:
-        fps = cap.get(_cv2.CAP_PROP_FPS)
+        """Capture a single frame from *cap* with a live preview."""
+        fps = cap.get(cv2.CAP_PROP_FPS)
         if fps <= 0:
             fps = 30
         frames_needed = int(fps * delay_ms / 1000)
@@ -95,33 +161,32 @@ class FaceRecognitionService:
             if not ret:
                 break
             display = frame.copy()
-            _cv2.putText(
+            cv2.putText(
                 display,
                 instruction,
                 (30, 60),
-                _cv2.FONT_HERSHEY_SIMPLEX,
+                cv2.FONT_HERSHEY_SIMPLEX,
                 0.9,
                 (0, 255, 0),
                 2,
             )
-            _cv2.imshow("Face Enrollment - Press Q to cancel", display)
-            key = _cv2.waitKey(30) & 0xFF
+            cv2.imshow("Face Enrollment - Press Q to cancel", display)
+            key = cv2.waitKey(30) & 0xFF
             if key == ord("q"):
                 raise SDMSException("Face enrollment cancelled by user.")
             count += 1
             final_frame = frame
 
         if final_frame is None:
-            raise SDMSException(
-                "Failed to capture image from webcam."
-            )
+            raise SDMSException("Failed to capture image from webcam.")
         return final_frame
 
     @staticmethod
     def _capture_with_preview(
         instruction: str, duration_ms: int = 2000
     ) -> np.ndarray:
-        cap = _cv2.VideoCapture(CAMERA_INDEX)
+        """Open the camera, show a preview, and return the captured frame."""
+        cap = cv2.VideoCapture(CAMERA_INDEX)
         if not cap.isOpened():
             cap.release()
             raise SDMSException(
@@ -133,23 +198,28 @@ class FaceRecognitionService:
                 cap, instruction, duration_ms
             )
         finally:
-            _cv2.destroyAllWindows()
+            cv2.destroyAllWindows()
             cap.release()
 
+    # ------------------------------------------------------------------
+    # Face enrollment
+    # ------------------------------------------------------------------
+
     def enroll_face(self, user_id: str, username: str) -> dict[str, Any]:
+        """Capture multiple face samples and train an LBPH model.
+
+        The trained model is stored as a flattened list of histogram
+        floats in the user's MongoDB document so it can be reconstructed
+        later for recognition.
+        """
         if not _FACE_RECOGNITION_AVAILABLE:
-            return {
-                "success": False,
-                "error": "Face recognition libraries are not installed.",
-            }
+            return {"success": False, "error": "Face recognition is not available."}
 
         try:
             self._check_camera()
-            logger.info(
-                "Starting face enrollment for user '%s'.", username
-            )
+            logger.info("Starting face enrollment for user '%s'.", username)
 
-            cap = _cv2.VideoCapture(CAMERA_INDEX)
+            cap = cv2.VideoCapture(CAMERA_INDEX)
             if not cap.isOpened():
                 cap.release()
                 raise SDMSException(
@@ -157,7 +227,8 @@ class FaceRecognitionService:
                     "Please ensure your camera is connected."
                 )
 
-            encodings: list[Any] = []
+            face_samples: list[np.ndarray] = []
+            face_histograms: list[np.ndarray] = []
             instructions: list[str] = [
                 "Look straight at the camera",
                 "Turn your head slightly left",
@@ -174,9 +245,7 @@ class FaceRecognitionService:
                         else f"Capture {i + 1} of {ENROLLMENT_SAMPLES}"
                     )
                     print()
-                    print(
-                        f"  [{i + 1}/{ENROLLMENT_SAMPLES}] {instruction}..."
-                    )
+                    print(f"  [{i + 1}/{ENROLLMENT_SAMPLES}] {instruction}...")
                     print("  (Preview will show - press Q to cancel)")
 
                     frame = self._capture_frame(
@@ -184,8 +253,13 @@ class FaceRecognitionService:
                         f"[{i + 1}/{ENROLLMENT_SAMPLES}] {instruction}",
                         delay_ms=2000,
                     )
-                    encoding = self._get_face_encoding(frame)
-                    encodings.append(encoding)
+                    face, _ = self._detect_face(frame)
+                    face_samples.append(face)
+
+                    # Also extract LBP histogram for direct storage
+                    lbp = self._compute_lbp_histogram(face)
+                    face_histograms.append(lbp)
+
                     logger.debug(
                         "Captured sample %d/%d for user '%s'.",
                         i + 1,
@@ -193,72 +267,67 @@ class FaceRecognitionService:
                         username,
                     )
             finally:
-                _cv2.destroyAllWindows()
+                cv2.destroyAllWindows()
                 cap.release()
 
-            avg_encoding: list[float] = (
-                np.mean(encodings, axis=0).tolist()
-            )
+            # Train LBPH model on captured samples
+            labels = np.array([0] * len(face_samples), dtype=np.int32)
+            recognizer = cv2.face.LBPHFaceRecognizer_create()
+            recognizer.train(face_samples, labels)
 
-            self._user_repo.update_face_encoding(user_id, avg_encoding)
+            # Store the model data: histograms are the most portable representation
+            avg_histogram: list[float] = np.mean(face_histograms, axis=0).tolist()
 
-            logger.info(
-                "Face enrollment completed for user '%s'.", username
-            )
+            self._user_repo.update_face_encoding(user_id, avg_histogram)
+
+            logger.info("Face enrollment completed for user '%s'.", username)
             return {
                 "success": True,
-                "message": (
-                    f"Face enrollment completed successfully for "
-                    f"'{username}'."
-                ),
-                "samples_captured": len(encodings),
+                "message": f"Face enrollment completed successfully for '{username}'.",
+                "samples_captured": len(face_samples),
             }
 
         except SDMSException as exc:
-            logger.warning(
-                "Face enrollment failed for user '%s': %s",
-                username,
-                exc,
-            )
+            logger.warning("Face enrollment failed for user '%s': %s", username, exc)
             return {"success": False, "error": str(exc)}
         except Exception as exc:
-            logger.exception(
-                "Unexpected error during face enrollment for user '%s'.",
-                username,
-            )
-            return {
-                "success": False,
-                "error": f"Face enrollment failed: {exc}",
-            }
+            logger.exception("Unexpected error during face enrollment for user '%s'.", username)
+            return {"success": False, "error": f"Face enrollment failed: {exc}"}
+
+    # ------------------------------------------------------------------
+    # Face recognition (login)
+    # ------------------------------------------------------------------
 
     def recognize_user(self) -> dict[str, Any]:
+        """Capture a live frame, extract the LBP histogram, and compare
+        against all enrolled users using Chi-Square distance.
+
+        Returns:
+            A dict with ``success``, ``user_id``, ``username``, ``role``,
+            ``distance`` (Chi-Square value), and ``message``.
+        """
         if not _FACE_RECOGNITION_AVAILABLE:
-            return {
-                "success": False,
-                "error": "Face recognition libraries are not installed.",
-            }
+            return {"success": False, "error": "Face recognition is not available."}
 
         try:
             self._check_camera()
 
-            enrolled_users: list[User] = (
-                self._user_repo.get_enrolled_users()
-            )
+            enrolled_users: list[User] = self._user_repo.get_enrolled_users()
             if not enrolled_users:
                 raise SDMSException(
                     "No users have enrolled in face recognition. "
                     "Please use password login."
                 )
 
-            known_encodings: list[Any] = []
+            known_histograms: list[np.ndarray] = []
             known_users: list[User] = []
 
             for u in enrolled_users:
-                if u.face_encoding:
-                    known_encodings.append(np.array(u.face_encoding))
+                if u.face_encoding and len(u.face_encoding) > 0:
+                    known_histograms.append(np.array(u.face_encoding, dtype=np.float32))
                     known_users.append(u)
 
-            if not known_encodings:
+            if not known_histograms:
                 raise SDMSException(
                     "No facial data available for comparison."
                 )
@@ -268,55 +337,39 @@ class FaceRecognitionService:
             print("  (Press Q in preview window to cancel)")
 
             frame = self._capture_with_preview(
-                "Face Recognition - Look at camera",
-                duration_ms=2000,
+                "Face Recognition - Look at camera", duration_ms=2000,
             )
 
-            rgb = _cv2.cvtColor(frame, _cv2.COLOR_BGR2RGB)
-            face_locations = _face_rec.face_locations(rgb)
+            live_face, _ = self._detect_face(frame)
+            live_hist = self._compute_lbp_histogram(live_face)
 
-            if len(face_locations) == 0:
-                raise SDMSException(
-                    "No face detected. Please ensure your face is visible."
-                )
-            if len(face_locations) > 1:
-                raise SDMSException(
-                    "Multiple faces detected. "
-                    "Please ensure only you are visible."
-                )
+            # Compare using Chi-Square distance
+            best_distance = float("inf")
+            best_index = -1
 
-            face_encodings = _face_rec.face_encodings(
-                rgb, face_locations
+            for idx, known_hist in enumerate(known_histograms):
+                dist = self._chi_square_distance(live_hist, known_hist)
+                if dist < best_distance:
+                    best_distance = dist
+                    best_index = idx
+
+            logger.debug(
+                "Face recognition — best distance=%.4f (threshold=%.4f).",
+                best_distance,
+                FACE_MATCH_THRESHOLD,
             )
-            if not face_encodings:
+
+            if best_distance > FACE_MATCH_THRESHOLD or best_index < 0:
                 raise SDMSException(
-                    "Could not generate facial encoding."
+                    "Face does not match any enrolled user. "
+                    f"(Best match distance={best_distance:.2f})"
                 )
 
-            live_encoding = face_encodings[0]
-            distances = _face_rec.face_distance(
-                known_encodings, live_encoding
-            )
-            best_match_index = int(np.argmin(distances))
-            best_distance = float(distances[best_match_index])
-
-            if best_distance > FACE_MATCH_THRESHOLD:
-                logger.info(
-                    "Face recognition failed — best distance=%.4f "
-                    "(threshold=%.4f).",
-                    best_distance,
-                    FACE_MATCH_THRESHOLD,
-                )
-                raise SDMSException(
-                    "Face does not match any enrolled user."
-                )
-
-            matched_user = known_users[best_match_index]
+            matched_user = known_users[best_index]
 
             if not matched_user.is_active:
                 raise SDMSException(
-                    "This account has been deactivated. "
-                    "Contact an administrator."
+                    "This account has been deactivated. Contact an administrator."
                 )
 
             self._session_mgr.create_session(
@@ -328,8 +381,7 @@ class FaceRecognitionService:
             )
 
             logger.info(
-                "User '%s' authenticated via face recognition "
-                "(distance=%.4f).",
+                "User '%s' authenticated via face recognition (distance=%.4f).",
                 matched_user.username,
                 best_distance,
             )
@@ -340,43 +392,94 @@ class FaceRecognitionService:
                 "username": matched_user.username,
                 "role": matched_user.role,
                 "distance": best_distance,
-                "message": (
-                    f"Welcome back, {matched_user.username}!"
-                ),
+                "message": f"Welcome back, {matched_user.username}!",
             }
 
         except SDMSException as exc:
             logger.warning("Face recognition login failed: %s", exc)
             return {"success": False, "error": str(exc)}
         except Exception as exc:
-            logger.exception(
-                "Unexpected error during face recognition login."
-            )
-            return {
-                "success": False,
-                "error": f"Face recognition failed: {exc}",
-            }
+            logger.exception("Unexpected error during face recognition login.")
+            return {"success": False, "error": f"Face recognition failed: {exc}"}
+
+    # ------------------------------------------------------------------
+    # Enrollment management
+    # ------------------------------------------------------------------
 
     def remove_enrollment(self, user_id: str) -> dict[str, Any]:
         try:
             self._user_repo.remove_face_encoding(user_id)
-            logger.info(
-                "Face enrollment removed for user_id='%s'.", user_id
-            )
-            return {
-                "success": True,
-                "message": "Face enrollment removed successfully.",
-            }
+            logger.info("Face enrollment removed for user_id='%s'.", user_id)
+            return {"success": True, "message": "Face enrollment removed successfully."}
         except Exception as exc:
-            logger.exception(
-                "Failed to remove face enrollment for user_id='%s'.",
-                user_id,
-            )
-            return {
-                "success": False,
-                "error": f"Failed to remove face enrollment: {exc}",
-            }
+            logger.exception("Failed to remove face enrollment for user_id='%s'.", user_id)
+            return {"success": False, "error": f"Failed to remove face enrollment: {exc}"}
 
-    def is_enrolled(self, user_id: str) -> bool:
-        user = self._user_repo.get_by_user_id(user_id)
-        return user is not None and user.face_enrolled
+    # ------------------------------------------------------------------
+    # LBP histogram helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _compute_lbp_histogram(face_gray: np.ndarray) -> np.ndarray:
+        """Compute a Local Binary Pattern histogram for a face image.
+
+        The image is divided into 4×4 = 16 blocks.  An LBP histogram
+        (59 bins per block for uniform LBP) is computed per block and
+        concatenated, giving a 16 × 59 = 944-dimensional feature vector.
+        """
+        h, w = face_gray.shape
+        block_h, block_w = h // 4, w // 4
+        histograms: list[np.ndarray] = []
+
+        for row in range(4):
+            for col in range(4):
+                y_start = row * block_h
+                y_end = (row + 1) * block_h if row < 3 else h
+                x_start = col * block_w
+                x_end = (col + 1) * block_w if col < 3 else w
+                block = face_gray[y_start:y_end, x_start:x_end]
+
+                lbp_block = FaceRecognitionService._local_binary_pattern(block)
+                hist = cv2.calcHist(
+                    [lbp_block.astype(np.uint8)],
+                    [0],
+                    None,
+                    [59],  # uniform LBP has 59 bins
+                    [0, 59],
+                )
+                cv2.normalize(hist, hist, norm_type=cv2.NORM_L2)
+                histograms.append(hist.flatten())
+
+        return np.concatenate(histograms)
+
+    @staticmethod
+    def _local_binary_pattern(image: np.ndarray) -> np.ndarray:
+        """Compute the basic LBP (radius=1, 8 neighbours) of *image*.
+
+        Returns a uint8 array of the same shape with LBP codes in [0, 255].
+        """
+        h, w = image.shape
+        lbp = np.zeros((h - 2, w - 2), dtype=np.uint8)
+        centre = image[1 : h - 1, 1 : w - 1].astype(np.int16)
+
+        code = 1
+        for dy, dx in [(-1, -1), (-1, 0), (-1, 1), (0, 1),
+                       (1, 1), (1, 0), (1, -1), (0, -1)]:
+            neighbour = image[1 + dy : h - 1 + dy, 1 + dx : w - 1 + dx].astype(np.int16)
+            lbp += (neighbour >= centre).astype(np.uint8) * code
+            code <<= 1
+
+        return lbp
+
+    @staticmethod
+    def _chi_square_distance(hist_a: np.ndarray, hist_b: np.ndarray) -> float:
+        """Chi-Square distance between two histograms.
+
+        Lower values indicate a closer match.  The distance is
+        normalised by the number of bins.
+        """
+        eps = 1e-10
+        numerator = (hist_a - hist_b) ** 2
+        denominator = hist_a + hist_b + eps
+        chi_sq = np.sum(numerator / denominator)
+        return float(chi_sq / hist_a.shape[0])

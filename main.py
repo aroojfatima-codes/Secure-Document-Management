@@ -3,17 +3,17 @@
 
 This is the application entry point. It loads configuration, initialises
 the logging and database subsystems, verifies the storage directories,
-displays a welcome banner, and exits gracefully.
+and launches the modern GUI.
 
 Usage:
-    python main.py
+    python main.py          Launch the GUI (default)
+    python main.py --cli    Launch the CLI (legacy)
 """
 
 from __future__ import annotations
 
 import sys
 
-from cli.main import display_welcome, run_cli
 from config.settings import settings
 from database.manager import DatabaseManager
 from exceptions.custom_exceptions import DatabaseError
@@ -25,7 +25,7 @@ def main() -> None:
     """Application entry-point orchestrating startup and shutdown."""
     logger = setup_logging()
     logger.info("=" * 60)
-    logger.info("%s v%s starting …", settings.APP_NAME, settings.APP_VERSION)
+    logger.info("%s v%s starting ...", settings.APP_NAME, settings.APP_VERSION)
     logger.info("Environment: %s", settings.APP_ENVIRONMENT)
 
     db_manager = DatabaseManager()
@@ -41,8 +41,29 @@ def main() -> None:
     storage_mgr = StorageManager()
     storage_mgr.initialise()
 
-    display_welcome()
-    run_cli()
+    if "--cli" in sys.argv:
+        from cli.main import display_welcome, run_cli
+        display_welcome()
+        run_cli()
+    else:
+        from controllers.auth_controller import AuthController
+        from controllers.document_controller import DocumentController
+        from controllers.audit_controller import AuditController
+        from controllers.face_controller import FaceController
+        from gui.app import SDMSApp
+
+        auth_ctrl = AuthController()
+        doc_ctrl = DocumentController()
+        audit_ctrl = AuditController()
+        face_ctrl = FaceController()
+
+        app = SDMSApp(controller={
+            "auth": auth_ctrl,
+            "document": doc_ctrl,
+            "audit": audit_ctrl,
+            "face": face_ctrl,
+        })
+        app.mainloop()
 
     db_manager.disconnect()
     logger.info("%s shut down gracefully.", settings.APP_NAME)

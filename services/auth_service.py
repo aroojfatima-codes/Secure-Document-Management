@@ -4,15 +4,21 @@ hashes, and manages session lifecycle.
 This service sits between the controller and the lower-level
 crypto / database / session modules.  It contains **no** direct
 cryptographic implementation or database queries.
+
+Security note: Password hashing uses SHA-256. Both the registration
+and login paths must use the exact same hashing algorithm so that
+hashes match.  The ``_verify_password`` and ``_hash_password``
+implementations are kept in lock-step for this reason.
 """
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from crypto.hashing import SHA256Hasher
 from database.repositories.user_repository import UserRepository
-from exceptions.custom_exceptions import AuthenticationError, ValidationError
+from exceptions.custom_exceptions import AuthenticationError, DatabaseError, ValidationError
 from logger.logging_config import get_logger
 from models.user import User
 from services.session_manager import SessionManager
@@ -45,14 +51,15 @@ class AuthService:
         The login flow:
 
         1. Validate that both fields are provided.
-        2. Retrieve the user record from the database.
-        3. Verify the account is active.
-        4. Hash the supplied password and compare with stored hash.
-        5. Create a session containing user identity + RSA keys.
-        6. Return a success summary (without secrets).
+        2. Normalize the username (spaces → underscores).
+        3. Retrieve the user record from the database.
+        4. Verify the account is active.
+        5. Hash the supplied password and compare with stored hash.
+        6. Create a session containing user identity + RSA keys.
+        7. Return a success summary (without secrets).
 
         Args:
-            username: The user's login name.
+            username: The user's login name (spaces auto-converted).
             password: The plaintext password to verify.
 
         Returns:
@@ -69,23 +76,53 @@ class AuthService:
             ValidationError: If username or password is empty.
             AuthenticationError: If credentials are invalid or the
                 account is inactive.
+            DatabaseError: If the database cannot be queried.
         """
         self._validate_input(username, password)
 
-        user: User | None = self._user_repo.get_by_username(username.strip())
+        normalized_username = re.sub(r"\s+", "_", username.strip())
+        if normalized_username != username.strip():
+            logger.debug(
+                "Username '%s' normalized to '%s' for lookup.",
+                username, normalized_username,
+            )
+
+        try:
+            user: User | None = self._user_repo.get_by_username(normalized_username)
+        except DatabaseError:
+            logger.error("Database unavailable during login for '%s'.", normalized_username)
+            raise DatabaseError(
+                "Database is unavailable. Please try again later."
+            )
+
         if user is None:
-            logger.warning("Login attempt for unknown user '%s'.", username)
-            raise AuthenticationError("Invalid username or password.")
+            logger.warning(
+                "Login attempt for unknown user '%s' (normalized='%s').",
+                username, normalized_username,
+            )
+            raise AuthenticationError(
+                f"User '{normalized_username}' does not exist. "
+                "Please check the username or register first."
+            )
 
         if not user.is_active:
-            logger.warning("Login attempt for inactive user '%s'.", username)
+            logger.warning("Login attempt for inactive user '%s'.", normalized_username)
             raise AuthenticationError(
                 "This account has been deactivated. Contact an administrator."
             )
 
+        # Debug: log the stored hash length/prefix (safe - not full hash)
+        logger.debug(
+            "Verifying password for '%s' (hash prefix=%s...)",
+            normalized_username,
+            user.password_hash[:12] if user.password_hash else "EMPTY",
+        )
+
         if not self._verify_password(password, user.password_hash):
-            logger.warning("Incorrect password for user '%s'.", username)
-            raise AuthenticationError("Invalid username or password.")
+            logger.warning("Incorrect password for user '%s'.", normalized_username)
+            raise AuthenticationError(
+                "Password incorrect. Please try again or reset your password."
+            )
 
         self._session_mgr.create_session(
             user_id=user.user_id,
@@ -95,7 +132,7 @@ class AuthService:
             rsa_private_key=user.rsa_private_key,
         )
 
-        logger.info("User '%s' logged in successfully.", username)
+        logger.info("User '%s' logged in successfully.", normalized_username)
         return {
             "user_id": user.user_id,
             "username": user.username,

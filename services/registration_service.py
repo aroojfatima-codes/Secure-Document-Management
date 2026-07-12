@@ -24,6 +24,9 @@ logger = get_logger(__name__)
 
 USERNAME_PATTERN: re.Pattern[str] = re.compile(r"^[a-zA-Z0-9_]{3,30}$")
 
+# Characters that will be replaced with underscores in usernames
+USERNAME_REPLACE_CHARS: str = r"\s+"
+
 
 class RegistrationService:
     """Coordinates the full user-registration workflow.
@@ -47,19 +50,20 @@ class RegistrationService:
 
         The registration flow is:
 
-        1. Validate all input fields.
-        2. Check that the username is not already taken.
-        3. Hash the password with SHA-256 (plaintext is never stored).
-        4. Generate an RSA-2048 key pair for the user.
-        5. Build a :class:`~models.user.User` object.
-        6. Persist the user via :class:`UserRepository`.
-        7. Return a success summary (without secrets).
+        1. Normalize the username (spaces → underscores).
+        2. Validate all input fields.
+        3. Check that the username is not already taken.
+        4. Hash the password with SHA-256 (plaintext is never stored).
+        5. Generate an RSA-2048 key pair for the user.
+        6. Build a :class:`~models.user.User` object.
+        7. Persist the user via :class:`UserRepository`.
+        8. Return a success summary (without secrets).
 
         Args:
             username: Desired login name (3–30 alphanumeric chars +
-                      underscores).
+                      underscores). Spaces are auto-converted.
             password: Plaintext password (min 8 chars, must contain
-                      uppercase, lowercase, and a digit).
+                      uppercase, lowercase, a digit, and a special char).
             role:     ``"admin"``, ``"editor"``, or ``"viewer"``.
 
         Returns:
@@ -81,6 +85,13 @@ class RegistrationService:
                 hashing fails.
             DatabaseError: Propagated on storage failure.
         """
+        normalized_username = self._normalize_username(username)
+        if normalized_username != username:
+            logger.info(
+                "Username '%s' normalized to '%s'.", username, normalized_username
+            )
+        username = normalized_username
+
         self._validate_username(username)
         self._validate_password(password)
         self._validate_role(role)
@@ -111,6 +122,16 @@ class RegistrationService:
         }
 
     # ------------------------------------------------------------------
+    # Normalization
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _normalize_username(username: str) -> str:
+        """Replace whitespace sequences with underscores."""
+        normalized = re.sub(r"\s+", "_", username.strip())
+        return normalized
+
+    # ------------------------------------------------------------------
     # Validation
     # ------------------------------------------------------------------
 
@@ -122,29 +143,37 @@ class RegistrationService:
         if not USERNAME_PATTERN.match(username):
             raise ValidationError(
                 "Username must be 3–30 characters long and may only "
-                "contain letters, digits, and underscores."
+                "contain letters, digits, and underscores. "
+                "Spaces are automatically converted to underscores."
             )
 
     @staticmethod
     def _validate_password(password: str) -> None:
-        """Enforce minimum password strength requirements."""
+        """Enforce minimum password strength requirements.
+
+        Displays ALL missing requirements at once rather than failing
+        on the first one.
+        """
+        rules: list[tuple[str, str]] = [
+            (r".{8,}", "At least 8 characters"),
+            (r"[A-Z]", "One uppercase letter"),
+            (r"[a-z]", "One lowercase letter"),
+            (r"[0-9]", "One digit"),
+            (r"[^a-zA-Z0-9]", "One special character"),
+        ]
+        missing: list[str] = []
+
         if not password:
             raise ValidationError("Password is required.")
-        if len(password) < 8:
+
+        for pattern, label in rules:
+            if not re.search(pattern, password):
+                missing.append(label)
+
+        if missing:
+            detail = "\n  ".join(f"- {m}" for m in missing)
             raise ValidationError(
-                "Password must be at least 8 characters long."
-            )
-        if not re.search(r"[A-Z]", password):
-            raise ValidationError(
-                "Password must contain at least one uppercase letter."
-            )
-        if not re.search(r"[a-z]", password):
-            raise ValidationError(
-                "Password must contain at least one lowercase letter."
-            )
-        if not re.search(r"[0-9]", password):
-            raise ValidationError(
-                "Password must contain at least one digit."
+                f"Password does not meet requirements:\n  {detail}"
             )
 
     @staticmethod
