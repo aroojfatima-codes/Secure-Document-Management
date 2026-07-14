@@ -35,3 +35,11 @@ class FileHandlingError(SDMSException):
 
 class ValidationError(SDMSException):
     """Raised when input data fails validation rules."""
+
+
+class DocumentIDGenerationError(SDMSException):
+    """Raised when a sequential Document ID cannot be generated."""
+
+
+class CounterNotFoundError(SDMSException):
+    """Raised when a required counter does not exist in the database."""

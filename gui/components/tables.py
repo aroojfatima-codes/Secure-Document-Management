@@ -38,8 +38,12 @@ class StyledTable(ctk.CTkFrame):
             style="SDMS.Treeview", selectmode="browse",
         )
 
+        self._sort_reverse: dict[str, bool] = {}
         for col_id, heading, width in columns:
-            self.tree.heading(col_id, text=heading, anchor="w")
+            self.tree.heading(
+                col_id, text=heading, anchor="w",
+                command=lambda c=col_id: self._sort_column(c),
+            )
             self.tree.column(col_id, width=width, minwidth=40, anchor="w")
 
         scrollbar = ctk.CTkScrollbar(
@@ -52,6 +56,14 @@ class StyledTable(ctk.CTkFrame):
         scrollbar.pack(side="right", fill="y")
 
         self._data: list[dict[str, Any]] = []
+
+    def _sort_column(self, col_id: str):
+        reverse = self._sort_reverse.get(col_id, False)
+        items = [(self.tree.set(child, col_id), child) for child in self.tree.get_children("")]
+        items.sort(key=lambda t: t[0], reverse=reverse)
+        for index, (val, child) in enumerate(items):
+            self.tree.move(child, "", index)
+        self._sort_reverse[col_id] = not reverse
 
     def clear(self):
         for item in self.tree.get_children():

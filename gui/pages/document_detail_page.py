@@ -10,6 +10,7 @@ from gui.components.cards import InfoCard, PageHeader
 from gui.components.forms import StyledButton
 from gui.components.dialogs import Toast
 from gui.theme import ThemeManager, Dim, Fonts
+from gui.smooth_scrolling import bind_smooth_scroll
 
 if TYPE_CHECKING:
     from gui.app import App
@@ -39,6 +40,7 @@ class DocumentDetailPage(ctk.CTkFrame):
             scrollbar_button_hover_color=C.scrollbar_hover,
         )
         self._scroll.pack(fill="both", expand=True, padx=Dim.PAD_XL, pady=Dim.PAD_MD)
+        bind_smooth_scroll(self._scroll)
 
     def refresh(self, document_id: str = "") -> None:
         if document_id:
@@ -92,7 +94,17 @@ class DocumentDetailPage(ctk.CTkFrame):
 
         StyledButton(
             actions, text="Share", variant="success", command=self._share, width=130,
-        ).pack(side="left")
+        ).pack(side="left", padx=(0, 8))
+
+        StyledButton(
+            actions, text="Back to Documents", variant="outline",
+            command=lambda: self._app._navigate("documents"), width=160,
+        ).pack(side="left", padx=(0, 8))
+
+        StyledButton(
+            actions, text="Dashboard",
+            command=lambda: self._app._navigate("dashboard"), width=120,
+        ).pack(side="right")
 
     def _download(self) -> None:
         self._app._navigate("download")

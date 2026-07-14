@@ -5,6 +5,7 @@ import customtkinter as ctk
 from gui.theme import ThemeManager, Dim, Fonts
 from gui.components.cards import StatCard, ActionCard
 from gui.components.charts import DonutChart, BarChart
+from gui.smooth_scrolling import bind_smooth_scroll
 
 tm = ThemeManager()
 C = tm.C
@@ -176,6 +177,8 @@ class DashboardPage(ctk.CTkFrame):
             system_frame, text="\u26A1 System healthy \u2014 all services operational",
             font=Fonts.TINY, text_color=C.success,
         ).pack(pady=(0, Dim.PAD_MD))
+
+        bind_smooth_scroll(scroll)
 
     def apply_theme(self):
         self.configure(fg_color=C.bg_main)

@@ -22,10 +22,12 @@ class LoginPage(ctk.CTkFrame):
         self.grid_rowconfigure(0, weight=1)
 
         center = ctk.CTkFrame(self, fg_color="transparent")
-        center.grid(row=0, column=0)
+        center.grid(row=0, column=0, sticky="nsew")
         center.grid_columnconfigure(0, weight=1)
+        center.grid_rowconfigure(0, weight=1)
 
         self._build_bg_animation(center)
+
         card = self._build_card(center)
         card.grid(row=0, column=0, padx=Dim.PAD_XL, pady=Dim.PAD_XL)
 
@@ -37,11 +39,10 @@ class LoginPage(ctk.CTkFrame):
         bg.place(relx=0, rely=0, relwidth=1, relheight=1)
         bg.lower()
         self._bg_canvas = ctk.CTkCanvas(
-            bg, bg=C.bg_main, highlightthickness=0, width=900, height=700,
+            bg, bg=C.bg_main, highlightthickness=0,
         )
         self._bg_canvas.place(relx=0, rely=0, relwidth=1, relheight=1)
 
-        # (start_x, start_y, speed_x, speed_y) per orb
         self._orbs = [
             {"x": 120, "y": 100, "vx": 0.7, "vy": 0.4, "r": 60},
             {"x": 700, "y": 500, "vx": -0.5, "vy": 0.6, "r": 80},
@@ -51,8 +52,8 @@ class LoginPage(ctk.CTkFrame):
         self._animate_bg()
 
     def _animate_bg(self):
-        canvas_w = max(self._bg_canvas.winfo_width(), 900)
-        canvas_h = max(self._bg_canvas.winfo_height(), 700)
+        canvas_w = max(self._bg_canvas.winfo_width(), 400)
+        canvas_h = max(self._bg_canvas.winfo_height(), 400)
 
         for orb in self._orbs:
             orb["x"] += orb["vx"]
@@ -87,75 +88,79 @@ class LoginPage(ctk.CTkFrame):
         card = ctk.CTkFrame(
             parent, fg_color=C.bg_card_translucent, corner_radius=Dim.RADIUS_XL,
             border_width=1, border_color=C.border_light,
-            width=400, height=620,
         )
-        card.pack_propagate(False)
+        card.grid_columnconfigure(0, weight=1)
 
         ctk.CTkLabel(
             card, text="\uD83D\uDD12", font=(Fonts.F, 40),
             text_color=C.primary,
-        ).pack(pady=(Dim.PAD_XL, Dim.PAD_SM))
+        ).grid(row=0, column=0, pady=(Dim.PAD_XL, Dim.PAD_SM))
 
         ctk.CTkLabel(
             card, text="Secure Document Manager",
             font=Fonts.TITLE, text_color=C.text_primary,
-        ).pack(pady=(0, 4))
+        ).grid(row=1, column=0, pady=(0, 4))
 
         ctk.CTkLabel(
             card, text="Sign in to your account",
             font=Fonts.BODY, text_color=C.text_secondary,
-        ).pack(pady=(0, Dim.PAD_LG))
+        ).grid(row=2, column=0, pady=(0, Dim.PAD_LG))
+
+        form_frame = ctk.CTkFrame(card, fg_color="transparent")
+        form_frame.grid(row=3, column=0, sticky="ew", padx=Dim.PAD_XL)
+        form_frame.grid_columnconfigure(0, weight=1)
 
         self._username = StyledEntry(
-            card, label="Username", placeholder="Enter your username", width=320,
+            form_frame, label="Username", placeholder="Enter your username",
         )
-        self._username.pack(padx=Dim.PAD_LG, pady=(0, Dim.PAD_MD))
+        self._username.grid(row=0, column=0, sticky="ew", pady=(0, Dim.PAD_MD))
 
-        self._password = PasswordEntry(card, label="Password", width=320)
-        self._password.pack(padx=Dim.PAD_LG, pady=(0, Dim.PAD_MD))
+        self._password = PasswordEntry(form_frame, label="Password")
+        self._password.grid(row=1, column=0, sticky="ew", pady=(0, Dim.PAD_MD))
 
-        remember_frame = ctk.CTkFrame(card, fg_color="transparent")
-        remember_frame.pack(fill="x", padx=Dim.PAD_LG, pady=(0, Dim.PAD_MD))
+        remember_frame = ctk.CTkFrame(form_frame, fg_color="transparent")
+        remember_frame.grid(row=2, column=0, sticky="ew", pady=(0, Dim.PAD_MD))
+        remember_frame.grid_columnconfigure(0, weight=1)
         self._remember = ctk.CTkCheckBox(
             remember_frame, text="Remember me", font=Fonts.SMALL,
             text_color=C.text_secondary, fg_color=C.primary,
             hover_color=C.primary_hover, border_color=C.border,
             checkmark_color=C.text_on_primary,
         )
-        self._remember.pack(side="left")
+        self._remember.grid(row=0, column=0, sticky="w")
         ctk.CTkButton(
             remember_frame, text="Forgot password?", font=Fonts.SMALL_BOLD,
             fg_color="transparent", hover_color=C.bg_sidebar_hover,
             text_color=C.primary, command=self._forgot,
-        ).pack(side="right")
+        ).grid(row=0, column=1, sticky="e")
 
         StyledButton(
-            card, text="Sign In", width=320, height=40,
+            form_frame, text="Sign In", height=40,
             command=self._do_login,
-        ).pack(padx=Dim.PAD_LG, pady=(0, Dim.PAD_MD))
+        ).grid(row=3, column=0, sticky="ew", pady=(0, Dim.PAD_MD))
 
         self._error_label = ctk.CTkLabel(
-            card, text="", font=Fonts.TINY,
+            form_frame, text="", font=Fonts.TINY,
             text_color=C.danger, wraplength=300,
         )
-        self._error_label.pack(padx=Dim.PAD_LG, pady=(0, Dim.PAD_SM))
+        self._error_label.grid(row=4, column=0, sticky="ew", pady=(0, Dim.PAD_SM))
 
         divider = ctk.CTkFrame(card, fg_color=C.border_light, height=1)
-        divider.pack(fill="x", padx=Dim.PAD_LG, pady=(Dim.PAD_MD, Dim.PAD_MD))
+        divider.grid(row=4, column=0, sticky="ew", padx=Dim.PAD_XL, pady=(Dim.PAD_MD, Dim.PAD_MD))
 
         ctk.CTkLabel(
             card, text="or continue with", font=Fonts.SMALL,
             text_color=C.text_secondary,
-        ).pack(pady=(0, Dim.PAD_MD))
+        ).grid(row=5, column=0, pady=(0, Dim.PAD_MD))
 
         StyledButton(
-            card, text="Login with Face Recognition", width=320, height=40,
+            card, text="Login with Face Recognition", height=40,
             fg_color=C.accent_purple, hover_color=C.accent_purple,
             command=self._on_face_login_click,
-        ).pack(padx=Dim.PAD_LG, pady=(0, Dim.PAD_MD))
+        ).grid(row=6, column=0, sticky="ew", padx=Dim.PAD_XL, pady=(0, Dim.PAD_MD))
 
         bottom = ctk.CTkFrame(card, fg_color="transparent")
-        bottom.pack(side="bottom", pady=Dim.PAD_LG)
+        bottom.grid(row=7, column=0, pady=Dim.PAD_LG)
         ctk.CTkLabel(
             bottom, text="Don't have an account?", font=Fonts.BODY,
             text_color=C.text_secondary,

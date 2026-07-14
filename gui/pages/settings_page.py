@@ -5,6 +5,7 @@ import customtkinter as ctk
 from gui.theme import ThemeManager, Dim, Fonts
 from gui.components.forms import StyledButton, StyledComboBox
 from gui.components.dialogs import Toast, ConfirmDialog
+from gui.smooth_scrolling import bind_smooth_scroll
 
 tm = ThemeManager()
 C = tm.C
@@ -118,6 +119,8 @@ class SettingsPage(ctk.CTkFrame):
             font=Fonts.TINY, text_color=C.text_dim,
         ).pack(anchor="w", padx=Dim.PAD_LG, pady=(0, Dim.PAD_MD))
 
+        bind_smooth_scroll(scroll)
+
     def _make_section(self, parent, title: str, row: int) -> ctk.CTkFrame:
         card = ctk.CTkFrame(
             parent, fg_color=C.bg_card, corner_radius=Dim.RADIUS_LG,
@@ -132,3 +135,6 @@ class SettingsPage(ctk.CTkFrame):
         mode = self._theme_combo.get_value().lower()
         if self._on_theme_change:
             self._on_theme_change(mode)
+
+    def apply_theme(self):
+        self.configure(fg_color=C.bg_main)

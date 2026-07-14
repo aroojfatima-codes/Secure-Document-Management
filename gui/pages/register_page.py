@@ -5,6 +5,7 @@ import customtkinter as ctk
 from gui.theme import ThemeManager, Dim, Fonts
 from gui.components.forms import StyledEntry, PasswordEntry, StyledComboBox, StyledButton
 from gui.components.dialogs import Toast
+from gui.smooth_scrolling import bind_smooth_scroll
 
 tm = ThemeManager()
 C = tm.C
@@ -19,58 +20,68 @@ class RegisterPage(ctk.CTkFrame):
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
 
-        center = ctk.CTkFrame(self, fg_color="transparent")
+        scroll = ctk.CTkScrollableFrame(
+            self, fg_color="transparent",
+            scrollbar_button_color=C.scrollbar,
+            scrollbar_button_hover_color=C.scrollbar_hover,
+        )
+        scroll.grid(row=0, column=0, sticky="nsew", padx=Dim.PAD_XL, pady=Dim.PAD_MD)
+        scroll.grid_columnconfigure(0, weight=1)
+        scroll.grid_rowconfigure(0, weight=1)
+
+        center = ctk.CTkFrame(scroll, fg_color="transparent")
         center.grid(row=0, column=0)
+        center.grid_columnconfigure(0, weight=1)
 
         card = ctk.CTkFrame(
             center, fg_color=C.bg_card_translucent, corner_radius=Dim.RADIUS_XL,
             border_width=1, border_color=C.border_light,
-            width=440, height=620,
         )
-        card.pack_propagate(False)
-        card.grid(row=0, column=0, padx=Dim.PAD_XL, pady=Dim.PAD_XL)
+        card.grid(row=0, column=0, padx=Dim.PAD_XL, pady=Dim.PAD_XL, sticky="nsew")
+        card.grid_columnconfigure(0, weight=1)
 
         ctk.CTkLabel(
             card, text="Create Account", font=Fonts.TITLE,
             text_color=C.text_primary,
-        ).pack(pady=(Dim.PAD_XL, Dim.PAD_SM))
+        ).grid(row=0, column=0, pady=(Dim.PAD_XL, Dim.PAD_SM))
         ctk.CTkLabel(
             card, text="Fill in your details to register",
             font=Fonts.BODY, text_color=C.text_secondary,
-        ).pack(pady=(0, Dim.PAD_LG))
+        ).grid(row=1, column=0, pady=(0, Dim.PAD_LG))
 
         form = ctk.CTkFrame(card, fg_color="transparent")
-        form.pack(fill="x", padx=Dim.PAD_LG)
+        form.grid(row=2, column=0, sticky="ew", padx=Dim.PAD_XL)
+        form.grid_columnconfigure(0, weight=1)
 
-        self._username = StyledEntry(form, label="Username", placeholder="Choose a username", width=350)
-        self._username.pack(fill="x", pady=(0, Dim.PAD_SM))
+        self._username = StyledEntry(form, label="Username", placeholder="Choose a username")
+        self._username.grid(row=0, column=0, sticky="ew", pady=(0, Dim.PAD_SM))
 
-        self._fullname = StyledEntry(form, label="Full Name", placeholder="Your full name", width=350)
-        self._fullname.pack(fill="x", pady=(0, Dim.PAD_SM))
+        self._fullname = StyledEntry(form, label="Full Name", placeholder="Your full name")
+        self._fullname.grid(row=1, column=0, sticky="ew", pady=(0, Dim.PAD_SM))
 
-        self._email = StyledEntry(form, label="Email", placeholder="you@example.com", width=350)
-        self._email.pack(fill="x", pady=(0, Dim.PAD_SM))
+        self._email = StyledEntry(form, label="Email", placeholder="you@example.com")
+        self._email.grid(row=2, column=0, sticky="ew", pady=(0, Dim.PAD_SM))
 
         self._role = StyledComboBox(form, label="Role",
-                                    values=["admin", "officer", "viewer"], width=350)
-        self._role.pack(fill="x", pady=(0, Dim.PAD_SM))
+                                    values=["admin", "editor", "viewer"])
+        self._role.grid(row=3, column=0, sticky="ew", pady=(0, Dim.PAD_SM))
 
-        self._password = PasswordEntry(form, label="Password", width=350)
-        self._password.pack(fill="x", pady=(0, Dim.PAD_SM))
+        self._password = PasswordEntry(form, label="Password")
+        self._password.grid(row=4, column=0, sticky="ew", pady=(0, Dim.PAD_SM))
 
         self._strength_frame = ctk.CTkFrame(form, fg_color="transparent", height=6)
-        self._strength_frame.pack(fill="x", pady=(0, Dim.PAD_SM))
+        self._strength_frame.grid(row=5, column=0, sticky="ew", pady=(0, Dim.PAD_SM))
         self._strength_frame.pack_propagate(False)
         self._strength_bar = ctk.CTkFrame(self._strength_frame, fg_color=C.danger, height=4)
         self._strength_bar.place(relx=0, rely=0, relwidth=0, relheight=1)
         self._strength_label = ctk.CTkLabel(
             form, text="", font=Fonts.TINY, text_color=C.text_dim,
         )
-        self._strength_label.pack(anchor="w")
+        self._strength_label.grid(row=6, column=0, sticky="w")
         self._password.entry.bind("<KeyRelease>", self._check_strength)
 
-        self._confirm = PasswordEntry(form, label="Confirm Password", width=350)
-        self._confirm.pack(fill="x", pady=(0, Dim.PAD_SM))
+        self._confirm = PasswordEntry(form, label="Confirm Password")
+        self._confirm.grid(row=7, column=0, sticky="ew", pady=(0, Dim.PAD_SM))
 
         self._terms = ctk.CTkCheckBox(
             form, text="I agree to the Terms of Service",
@@ -78,20 +89,20 @@ class RegisterPage(ctk.CTkFrame):
             fg_color=C.primary, hover_color=C.primary_hover,
             border_color=C.border, checkmark_color=C.text_on_primary,
         )
-        self._terms.pack(anchor="w", pady=(0, Dim.PAD_MD))
+        self._terms.grid(row=8, column=0, sticky="w", pady=(0, Dim.PAD_MD))
 
         StyledButton(
-            card, text="Register", width=350, height=40,
+            card, text="Register", height=40,
             command=self._do_register,
-        ).pack(padx=Dim.PAD_LG, pady=(0, Dim.PAD_SM))
+        ).grid(row=3, column=0, sticky="ew", padx=Dim.PAD_XL, pady=(0, Dim.PAD_SM))
 
         self._error_label = ctk.CTkLabel(
             card, text="", font=Fonts.TINY, text_color=C.danger, wraplength=330,
         )
-        self._error_label.pack(padx=Dim.PAD_LG, pady=(0, Dim.PAD_SM))
+        self._error_label.grid(row=4, column=0, sticky="ew", padx=Dim.PAD_XL, pady=(0, Dim.PAD_SM))
 
         bottom = ctk.CTkFrame(card, fg_color="transparent")
-        bottom.pack(side="bottom", pady=Dim.PAD_LG)
+        bottom.grid(row=5, column=0, pady=Dim.PAD_LG)
         ctk.CTkLabel(bottom, text="Already have an account?", font=Fonts.BODY,
                      text_color=C.text_secondary).pack(side="left")
         ctk.CTkButton(
@@ -99,6 +110,8 @@ class RegisterPage(ctk.CTkFrame):
             hover_color=C.bg_sidebar_hover, text_color=C.primary,
             command=self._switch,
         ).pack(side="left", padx=(4, 0))
+
+        bind_smooth_scroll(scroll)
 
     def _check_strength(self, _=None):
         pw = self._password.get_value()
@@ -144,3 +157,6 @@ class RegisterPage(ctk.CTkFrame):
     def _switch(self):
         if self._on_switch_login:
             self._on_switch_login()
+
+    def apply_theme(self):
+        self.configure(fg_color=C.bg_main)

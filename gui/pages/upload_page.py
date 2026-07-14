@@ -6,6 +6,7 @@ from gui.theme import ThemeManager, Dim, Fonts
 from gui.components.forms import StyledButton, StyledEntry, StyledComboBox, StyledText
 from gui.components.loading import AnimatedProgressBar
 from gui.components.dialogs import Toast
+from gui.smooth_scrolling import bind_smooth_scroll
 
 tm = ThemeManager()
 C = tm.C
@@ -86,23 +87,23 @@ class UploadPage(ctk.CTkFrame):
         ctk.CTkLabel(
             info_frame, text="Title:", font=Fonts.BODY, text_color=C.text_secondary,
         ).grid(row=2, column=0, sticky="w", padx=Dim.PAD_LG, pady=Dim.PAD_SM)
-        self._title = StyledEntry(info_frame, width=300)
-        self._title.grid(row=2, column=1, sticky="w", padx=Dim.PAD_SM, pady=Dim.PAD_SM)
+        self._title = StyledEntry(info_frame)
+        self._title.grid(row=2, column=1, sticky="ew", padx=Dim.PAD_SM, pady=Dim.PAD_SM)
 
         ctk.CTkLabel(
             info_frame, text="Category:", font=Fonts.BODY, text_color=C.text_secondary,
         ).grid(row=3, column=0, sticky="w", padx=Dim.PAD_LG, pady=Dim.PAD_SM)
         self._category = StyledComboBox(
-            info_frame, values=["General", "Finance", "Legal", "HR", "Technical"], width=300,
+            info_frame, values=["General", "Finance", "Legal", "HR", "Technical"],
         )
-        self._category.grid(row=3, column=1, sticky="w", padx=Dim.PAD_SM, pady=Dim.PAD_SM)
+        self._category.grid(row=3, column=1, sticky="ew", padx=Dim.PAD_SM, pady=Dim.PAD_SM)
 
         ctk.CTkLabel(
             info_frame, text="Description:", font=Fonts.BODY,
             text_color=C.text_secondary,
         ).grid(row=4, column=0, sticky="nw", padx=Dim.PAD_LG, pady=Dim.PAD_SM)
-        self._description = StyledText(info_frame, height=60, width=300)
-        self._description.grid(row=4, column=1, sticky="w", padx=Dim.PAD_SM, pady=Dim.PAD_SM)
+        self._description = StyledText(info_frame, height=60)
+        self._description.grid(row=4, column=1, sticky="ew", padx=Dim.PAD_SM, pady=Dim.PAD_SM)
 
         self._progress_frame = ctk.CTkFrame(scroll, fg_color=C.bg_card, corner_radius=Dim.RADIUS_LG)
         self._progress_frame.grid(row=2, column=0, sticky="ew", pady=(0, Dim.PAD_LG))
@@ -119,8 +120,42 @@ class UploadPage(ctk.CTkFrame):
         self._progress_bar.grid(row=1, column=0, sticky="ew",
                                 padx=Dim.PAD_LG, pady=(0, Dim.PAD_MD))
 
+        self._success_frame = ctk.CTkFrame(scroll, fg_color=C.bg_card, corner_radius=Dim.RADIUS_LG)
+        self._success_frame.grid(row=3, column=0, sticky="ew", pady=(0, Dim.PAD_LG))
+        self._success_frame.grid_columnconfigure(0, weight=1)
+        self._success_frame.grid_remove()
+
+        self._success_icon = ctk.CTkLabel(
+            self._success_frame, text="\u2714", font=(Fonts.F, 48),
+            text_color=C.success,
+        )
+        self._success_icon.grid(row=0, column=0, pady=(Dim.PAD_LG, Dim.PAD_SM))
+
+        self._success_title = ctk.CTkLabel(
+            self._success_frame, text="Document Uploaded Successfully",
+            font=Fonts.TITLE_SM, text_color=C.success,
+        )
+        self._success_title.grid(row=1, column=0, pady=(0, Dim.PAD_SM))
+
+        self._success_doc_id = ctk.CTkLabel(
+            self._success_frame, text="",
+            font=Fonts.SUBTITLE, text_color=C.text_primary,
+        )
+        self._success_doc_id.grid(row=2, column=0, pady=(0, Dim.PAD_MD))
+
+        btn_frame_success = ctk.CTkFrame(self._success_frame, fg_color="transparent")
+        btn_frame_success.grid(row=3, column=0, pady=(0, Dim.PAD_MD))
+        StyledButton(
+            btn_frame_success, text="Upload Another", icon="\u2B06\uFE0F",
+            command=self._clear, width=140,
+        ).pack(side="left", padx=(0, Dim.PAD_SM))
+        StyledButton(
+            btn_frame_success, text="View Documents", variant="outline",
+            command=self._go_to_documents, width=140,
+        ).pack(side="left")
+
         btn_frame = ctk.CTkFrame(scroll, fg_color="transparent")
-        btn_frame.grid(row=3, column=0, sticky="ew")
+        btn_frame.grid(row=4, column=0, sticky="ew")
         StyledButton(
             btn_frame, text="Upload & Encrypt", icon="\u2B06\uFE0F",
             command=self._do_upload, width=160,
@@ -129,6 +164,8 @@ class UploadPage(ctk.CTkFrame):
             btn_frame, text="Clear", variant="outline",
             command=self._clear, width=100,
         ).pack(side="left")
+
+        bind_smooth_scroll(scroll)
 
     def _browse(self):
         import tkinter as tk
@@ -159,6 +196,7 @@ class UploadPage(ctk.CTkFrame):
             Toast(self, "Please select a file first", "warning")
             return
         self._progress_frame.grid()
+        self._success_frame.grid_remove()
         self._progress_bar.set_progress(0)
         self._animate_upload()
 
@@ -169,11 +207,31 @@ class UploadPage(ctk.CTkFrame):
             self.after(200, lambda: self._animate_upload(step + 1))
         else:
             self._progress_label.configure(text="Upload complete!")
-            Toast(self, "File uploaded and encrypted successfully!", "success")
-            self.after(1500, lambda: self._progress_frame.grid_remove())
+            self._progress_frame.grid_remove()
+            doc_id = self._last_upload_doc_id if hasattr(self, '_last_upload_doc_id') else "DOC-XXXX"
+            self._show_success(doc_id)
+
+    def _show_success(self, doc_id: str):
+        self._success_doc_id.configure(
+            text=f"Assigned Document ID:\n{doc_id}",
+            font=Fonts.SUBTITLE, text_color=C.text_primary,
+        )
+        self._success_frame.grid()
+
+    def _go_to_documents(self):
+        if hasattr(self, '_app') and self._app:
+            self._app._navigate("documents")
 
     def _clear(self):
         self._selected_path = ""
         self._filename_label.configure(text="No file selected", text_color=C.text_dim)
         self._title.clear()
         self._description.clear()
+        self._progress_frame.grid_remove()
+        self._success_frame.grid_remove()
+
+    def set_upload_result(self, doc_id: str):
+        self._last_upload_doc_id = doc_id
+
+    def apply_theme(self):
+        self.configure(fg_color=C.bg_main)

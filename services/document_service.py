@@ -30,6 +30,7 @@ from exceptions.custom_exceptions import (
 )
 from logger.logging_config import get_logger
 from models.document import Document
+from services.document_id_service import DocumentIDGeneratorService
 from services.session_manager import SessionManager
 from storage.manager import StorageManager
 
@@ -53,6 +54,7 @@ class DocumentUploadService:
         self._storage_mgr: StorageManager = StorageManager()
         self._doc_repo: DocumentRepository = DocumentRepository()
         self._hasher: SHA256Hasher = SHA256Hasher()
+        self._doc_id_svc: DocumentIDGeneratorService = DocumentIDGeneratorService()
 
     # ------------------------------------------------------------------
     # Public API
@@ -107,8 +109,9 @@ class DocumentUploadService:
             mimetypes.guess_type(original_filename)[0]
             or "application/octet-stream"
         )
-        document_id: str = generate_crypto_id()
-        encrypted_filename: str = f"{document_id}{ENCRYPTED_FILE_SUFFIX}"
+        document_id: str = self._doc_id_svc.generate_document_id()
+        internal_id: str = generate_crypto_id()
+        encrypted_filename: str = f"{internal_id}{ENCRYPTED_FILE_SUFFIX}"
 
         try:
             file_bytes: bytes = path.read_bytes()

@@ -32,9 +32,10 @@ class App(ctk.CTk):
         super().__init__()
         self.controller = controller
         self.title("Secure Document Management System")
-        self.geometry("1200x750")
         self.minsize(Dim.MIN_W, Dim.MIN_H)
         self.configure(fg_color=C.bg_main)
+
+        self.after(50, self._maximize_window)
 
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
@@ -66,6 +67,7 @@ class App(ctk.CTk):
         self._topbar.grid(row=0, column=0, sticky="ew")
         self._topbar.set_toggle_callback(self._toggle_sidebar)
         self._topbar.set_theme_change_callback(self._change_theme)
+        self._topbar.set_logout_callback(self._logout)
 
         self._page_container = ctk.CTkFrame(right, fg_color=C.bg_main)
         self._page_container.grid(row=1, column=0, sticky="nsew")
@@ -74,9 +76,21 @@ class App(ctk.CTk):
 
         self._show_login()
 
+    def _maximize_window(self):
+        try:
+            self.state("zoomed")
+        except Exception:
+            try:
+                w = self.winfo_screenwidth()
+                h = self.winfo_screenheight()
+                self.geometry(f"{w}x{h}+0+0")
+            except Exception:
+                pass
+
     def _show_login(self):
         self._clear_pages()
         self._sidebar.build_unauth_menu()
+        self._topbar.set_logged_in(False)
         page = LoginPage(
             self._page_container,
             on_login=self._handle_login,
@@ -174,6 +188,7 @@ class App(ctk.CTk):
     def _on_auth_success(self):
         Toast(self, f"Welcome, {self._current_user.get('full_name', self._current_user['username'])}!", "success")
         self._sidebar.build_auth_menu(self._current_user)
+        self._topbar.set_logged_in(True)
         self._page_cache.clear()
         self._navigate("dashboard")
 
@@ -240,10 +255,40 @@ class App(ctk.CTk):
             return DocumentDetailPage(self._page_container, app=self)
 
         def _make_upload():
-            return UploadPage(self._page_container)
+            page = UploadPage(self._page_container)
+            page._app = self
+            original_animate = page._animate_upload
+
+            def enhanced_animate(step=0):
+                if step <= 10:
+                    page._progress_bar.set_progress(step / 10)
+                    page._progress_label.configure(text=f"Uploading... {step * 10}%")
+                    page.after(200, lambda: enhanced_animate(step + 1))
+                else:
+                    page._progress_label.configure(text="Upload complete!")
+                    page._progress_frame.grid_remove()
+                    if ctrl:
+                        try:
+                            result = ctrl["document"].upload(page._selected_path)
+                            if result and result.get("success"):
+                                doc_id = result.get("document_id", "DOC-XXXX")
+                                page.set_upload_result(doc_id)
+                                page._show_success(doc_id)
+                                Toast(self, f"Document uploaded! ID: {doc_id}", "success")
+                            else:
+                                error_msg = result.get("error", "Upload failed") if result else "Upload failed"
+                                Toast(self, error_msg, "error")
+                        except Exception as e:
+                            Toast(self, f"Upload error: {e}", "error")
+                    else:
+                        page._show_success("DOC-0001")
+
+            page._animate_upload = enhanced_animate
+            return page
 
         def _make_download():
             page = DownloadPage(self._page_container)
+            page._app = self
             if ctrl:
                 try:
                     result = ctrl["document"].list_my_documents(1, 50)
@@ -254,10 +299,20 @@ class App(ctk.CTk):
             return page
 
         def _make_share():
-            return SharePage(self._page_container)
+            page = SharePage(self._page_container)
+            page._app = self
+            if ctrl:
+                try:
+                    result = ctrl["document"].list_my_documents(1, 50)
+                    docs = result.get("documents", []) if result and result.get("success") else []
+                    page.load_documents(docs)
+                except Exception:
+                    pass
+            return page
 
         def _make_shared():
             page = SharedPage(self._page_container)
+            page._app = self
             if ctrl:
                 try:
                     result = ctrl["document"].list_shared_with_me(1, 50)
@@ -269,6 +324,7 @@ class App(ctk.CTk):
 
         def _make_search():
             page = SearchPage(self._page_container)
+            page._app = self
             if ctrl:
                 try:
                     result = ctrl["document"].list_my_documents(1, 50)

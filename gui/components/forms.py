@@ -11,18 +11,19 @@ C = tm.C
 
 class StyledEntry(ctk.CTkFrame):
     def __init__(self, master, label: str = "", placeholder: str = "",
-                 show: str = "", width: int = 300, **kw):
+                 show: str = "", width: int = 0, **kw):
         super().__init__(master, fg_color="transparent", **kw)
         if label:
             ctk.CTkLabel(
                 self, text=label, font=Fonts.SMALL_BOLD,
                 text_color=C.text_secondary, anchor="w",
             ).pack(fill="x", pady=(0, 4))
+        entry_width = width if width > 0 else 0
         self.entry = ctk.CTkEntry(
             self, placeholder_text=placeholder, font=Fonts.BODY,
             fg_color=C.bg_input, border_color=C.border,
             text_color=C.text_primary, placeholder_text_color=C.text_dim,
-            corner_radius=Dim.RADIUS, height=36, width=width, show=show,
+            corner_radius=Dim.RADIUS, height=36, width=entry_width, show=show,
         )
         self.entry.pack(fill="x")
 
@@ -45,7 +46,7 @@ class StyledEntry(ctk.CTkFrame):
 
 
 class PasswordEntry(ctk.CTkFrame):
-    def __init__(self, master, label: str = "Password", width: int = 300, **kw):
+    def __init__(self, master, label: str = "Password", width: int = 0, **kw):
         super().__init__(master, fg_color="transparent", **kw)
         if label:
             ctk.CTkLabel(
@@ -55,14 +56,16 @@ class PasswordEntry(ctk.CTkFrame):
 
         row = ctk.CTkFrame(self, fg_color="transparent")
         row.pack(fill="x")
+        row.grid_columnconfigure(0, weight=1)
 
+        entry_width = width - 44 if width > 44 else 0
         self.entry = ctk.CTkEntry(
             row, placeholder_text="Enter password", font=Fonts.BODY,
             fg_color=C.bg_input, border_color=C.border,
             text_color=C.text_primary, placeholder_text_color=C.text_dim,
-            corner_radius=Dim.RADIUS, height=36, width=width - 44, show="\u2022",
+            corner_radius=Dim.RADIUS, height=36, width=entry_width, show="\u2022",
         )
-        self.entry.pack(side="left", fill="x", expand=True)
+        self.entry.grid(row=0, column=0, sticky="ew")
 
         self._showing = False
         self._toggle = ctk.CTkButton(
@@ -71,7 +74,7 @@ class PasswordEntry(ctk.CTkFrame):
             text_color=C.text_secondary, corner_radius=Dim.RADIUS_SM,
             command=self._do_toggle,
         )
-        self._toggle.pack(side="right", padx=(4, 0))
+        self._toggle.grid(row=0, column=1, padx=(4, 0))
 
     def _do_toggle(self):
         self._showing = not self._showing
@@ -95,7 +98,7 @@ class PasswordEntry(ctk.CTkFrame):
 
 class StyledComboBox(ctk.CTkFrame):
     def __init__(self, master, label: str = "", values: list[str] = None,
-                 width: int = 200, **kw):
+                 width: int = 0, **kw):
         super().__init__(master, fg_color="transparent", **kw)
         if not values:
             values = []
@@ -110,7 +113,7 @@ class StyledComboBox(ctk.CTkFrame):
             button_color=C.primary, button_hover_color=C.primary_hover,
             dropdown_fg_color=C.bg_card, dropdown_hover_color=C.bg_card_hover,
             text_color=C.text_primary, corner_radius=Dim.RADIUS,
-            height=36, width=width, state="readonly",
+            height=36, width=width if width > 0 else 0, state="readonly",
         )
         self.combo.pack(fill="x")
         if values:
@@ -161,7 +164,7 @@ class StyledButton(ctk.CTkButton):
 
 class StyledText(ctk.CTkFrame):
     def __init__(self, master, label: str = "", height: int = 100,
-                 width: int = 300, **kw):
+                 width: int = 0, **kw):
         super().__init__(master, fg_color="transparent", **kw)
         if label:
             ctk.CTkLabel(
@@ -171,7 +174,8 @@ class StyledText(ctk.CTkFrame):
         self.textbox = ctk.CTkTextbox(
             self, font=Fonts.BODY, fg_color=C.bg_input,
             text_color=C.text_primary, corner_radius=Dim.RADIUS,
-            height=height, width=width, border_color=C.border, border_width=1,
+            height=height, width=width if width > 0 else 0,
+            border_color=C.border, border_width=1,
         )
         self.textbox.pack(fill="x")
 

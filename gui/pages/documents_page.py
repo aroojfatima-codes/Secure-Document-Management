@@ -7,6 +7,7 @@ from gui.theme import ThemeManager, Dim, Fonts
 from gui.components.tables import StyledTable
 from gui.components.forms import StyledButton, StyledEntry
 from gui.components.dialogs import ConfirmDialog, Toast
+from gui.smooth_scrolling import bind_smooth_scroll
 
 tm = ThemeManager()
 C = tm.C
@@ -88,11 +89,12 @@ class DocumentsPage(ctk.CTkFrame):
         self._content.grid_rowconfigure(0, weight=1)
 
         self._table_view = StyledTable(self._content, columns=[
-            ("name", "File Name", 220),
-            ("type", "Type", 80),
-            ("owner", "Owner", 120),
-            ("size", "Size", 90),
-            ("modified", "Modified", 130),
+            ("document_id", "Document ID", 110),
+            ("original_filename", "File Name", 220),
+            ("file_extension", "Type", 80),
+            ("owner_id", "Owner", 120),
+            ("file_size_display", "Size", 90),
+            ("created_at", "Modified", 130),
             ("status", "Status", 100),
         ])
         self._table_view.bind_select(self._on_table_select)
@@ -103,6 +105,7 @@ class DocumentsPage(ctk.CTkFrame):
             scrollbar_button_color=C.scrollbar,
             scrollbar_button_hover_color=C.scrollbar_hover,
         )
+        bind_smooth_scroll(self._grid_frame)
 
         self._context_menu = None
 
@@ -130,11 +133,12 @@ class DocumentsPage(ctk.CTkFrame):
                 self._grid_frame.grid_columnconfigure(i % cols, weight=1)
 
     def _make_file_card(self, parent, doc: dict) -> ctk.CTkFrame:
-        name = doc.get("filename", "file.txt")
+        name = doc.get("original_filename", doc.get("filename", "file.txt"))
         ext = name.rsplit(".", 1)[-1].lower() if "." in name else "txt"
         color = _file_colors().get(ext, C.text_dim)
-        size = doc.get("size", "Unknown")
-        modified = doc.get("modified_at", "")
+        size = doc.get("file_size_display", doc.get("size", "Unknown"))
+        modified = doc.get("created_at", doc.get("modified_at", ""))
+        doc_id = doc.get("document_id", "")
 
         card = ctk.CTkFrame(
             parent, fg_color=C.bg_card, corner_radius=Dim.RADIUS,
@@ -155,7 +159,7 @@ class DocumentsPage(ctk.CTkFrame):
         info = ctk.CTkFrame(card, fg_color="transparent")
         info.pack(side="left", fill="both", expand=True, pady=Dim.PAD_MD)
         ctk.CTkLabel(
-            info, text=name, font=Fonts.BODY_BOLD, text_color=C.text_primary,
+            info, text=f"{doc_id}  \u2022  {name}", font=Fonts.BODY_BOLD, text_color=C.text_primary,
             anchor="w",
         ).pack(fill="x")
         ctk.CTkLabel(
@@ -177,7 +181,7 @@ class DocumentsPage(ctk.CTkFrame):
         pass
 
     def _on_download(self, doc: dict):
-        Toast(self, f"Downloading {doc.get('filename', 'file')}...", "info")
+        Toast(self, f"Downloading {doc.get('original_filename', doc.get('filename', 'file'))}...", "info")
 
     def _on_table_select(self, _=None):
         pass
@@ -208,7 +212,7 @@ class DocumentsPage(ctk.CTkFrame):
         self._context_menu.add_command(
             label="Delete",
             command=lambda: ConfirmDialog(
-                self, f"Delete '{doc.get('filename', 'file')}'?",
+                self, f"Delete '{doc.get('original_filename', doc.get('filename', 'file'))}'?",
                 on_yes=lambda: Toast(self, "File deleted", "success"),
             ))
         self._context_menu.tk_popup(event.x_root, event.y_root)
@@ -219,7 +223,7 @@ class DocumentsPage(ctk.CTkFrame):
             self._documents = self._all_documents
             self._render_documents()
             return
-        filtered = [d for d in self._all_documents if q in d.get("filename", "").lower()]
+        filtered = [d for d in self._all_documents if q in d.get("original_filename", d.get("filename", "")).lower() or q in d.get("document_id", "").lower()]
         self._documents = filtered
         self._render_documents()
 

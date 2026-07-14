@@ -4,8 +4,9 @@ from __future__ import annotations
 import customtkinter as ctk
 from gui.theme import ThemeManager, Dim, Fonts
 from gui.components.tables import StyledTable
-from gui.components.forms import StyledComboBox, StyledButton
+from gui.components.forms import StyledComboBox, StyledButton, StyledEntry
 from gui.components.dialogs import Toast
+from gui.smooth_scrolling import bind_smooth_scroll
 
 tm = ThemeManager()
 C = tm.C
@@ -55,18 +56,36 @@ class AuditPage(ctk.CTkFrame):
         )
         self._user_filter.combo.configure(command=lambda _: self._apply_filter())
         self._user_filter.pack(side="left", padx=4, pady=Dim.PAD_MD)
+        ctk.CTkLabel(
+            filters, text="Search:", font=Fonts.BODY, text_color=C.text_secondary,
+        ).pack(side="left", padx=(Dim.PAD_MD, 4), pady=Dim.PAD_MD)
+        self._search = StyledEntry(
+            filters, placeholder="Search logs...", width=200,
+        )
+        self._search.entry.bind("<KeyRelease>", lambda _: self._apply_filter())
+        self._search.pack(side="left", padx=4, pady=Dim.PAD_MD)
 
     def _build_content(self):
-        self._table = StyledTable(self, columns=[
-            ("timestamp", "Timestamp", 160),
+        scroll = ctk.CTkScrollableFrame(
+            self, fg_color="transparent",
+            scrollbar_button_color=C.scrollbar,
+            scrollbar_button_hover_color=C.scrollbar_hover,
+        )
+        scroll.grid(row=2, column=0, sticky="nsew",
+                    padx=Dim.PAD_XL, pady=Dim.PAD_MD)
+        scroll.grid_columnconfigure(0, weight=1)
+
+        self._table = StyledTable(scroll, columns=[
+            ("document_id", "Document ID", 110),
+            ("action", "Action", 120),
             ("user", "User", 110),
-            ("action", "Action", 100),
-            ("resource", "Resource", 200),
+            ("timestamp", "Timestamp", 160),
+            ("status", "Status", 100),
             ("details", "Details", 200),
             ("ip", "IP Address", 120),
         ])
-        self._table.grid(row=2, column=0, sticky="nsew",
-                         padx=Dim.PAD_XL, pady=Dim.PAD_MD)
+        self._table.grid(row=0, column=0, sticky="nsew")
+        bind_smooth_scroll(scroll)
 
     def load_logs(self, logs: list[dict]):
         self._logs = logs
@@ -75,12 +94,18 @@ class AuditPage(ctk.CTkFrame):
     def _apply_filter(self):
         action = self._action_filter.get_value()
         user = self._user_filter.get_value()
+        search = self._search.get_value().lower()
         filtered = self._logs
         if action != "All":
             filtered = [l for l in filtered if l.get("action", "").lower() == action.lower()]
         if user != "All Users":
             filtered = [l for l in filtered if l.get("user", "") == user]
+        if search:
+            filtered = [l for l in filtered if search in l.get("document_id", "").lower() or search in l.get("details", "").lower() or search in l.get("user", "").lower()]
         self._table.insert_rows(filtered)
 
     def _export(self):
         Toast(self, "Audit log exported to CSV", "success")
+
+    def apply_theme(self):
+        self.configure(fg_color=C.bg_main)

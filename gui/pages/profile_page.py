@@ -5,6 +5,7 @@ import customtkinter as ctk
 from gui.theme import ThemeManager, Dim, Fonts
 from gui.components.forms import StyledEntry, PasswordEntry, StyledButton
 from gui.components.dialogs import Toast
+from gui.smooth_scrolling import bind_smooth_scroll
 
 tm = ThemeManager()
 C = tm.C
@@ -91,16 +92,16 @@ class ProfilePage(ctk.CTkFrame):
         ctk.CTkLabel(
             form, text="Full Name:", font=Fonts.BODY, text_color=C.text_secondary,
         ).grid(row=0, column=0, sticky="w", pady=Dim.PAD_SM)
-        self._name = StyledEntry(form, width=300)
+        self._name = StyledEntry(form)
         self._name.set_value(self._user.get("full_name", ""))
-        self._name.grid(row=0, column=1, sticky="w", padx=Dim.PAD_SM, pady=Dim.PAD_SM)
+        self._name.grid(row=0, column=1, sticky="ew", padx=Dim.PAD_SM, pady=Dim.PAD_SM)
 
         ctk.CTkLabel(
             form, text="Email:", font=Fonts.BODY, text_color=C.text_secondary,
         ).grid(row=1, column=0, sticky="w", pady=Dim.PAD_SM)
-        self._email = StyledEntry(form, width=300)
+        self._email = StyledEntry(form)
         self._email.set_value(self._user.get("email", ""))
-        self._email.grid(row=1, column=1, sticky="w", padx=Dim.PAD_SM, pady=Dim.PAD_SM)
+        self._email.grid(row=1, column=1, sticky="ew", padx=Dim.PAD_SM, pady=Dim.PAD_SM)
 
         StyledButton(
             edit_card, text="Save Changes", command=self._save_profile, width=130,
@@ -115,17 +116,19 @@ class ProfilePage(ctk.CTkFrame):
             text_color=C.text_primary,
         ).pack(anchor="w", padx=Dim.PAD_LG, pady=(Dim.PAD_MD, Dim.PAD_SM))
 
-        self._current_pw = PasswordEntry(pw_card, label="Current Password", width=300)
-        self._current_pw.pack(padx=Dim.PAD_LG, anchor="w")
-        self._new_pw = PasswordEntry(pw_card, label="New Password", width=300)
-        self._new_pw.pack(padx=Dim.PAD_LG, anchor="w", pady=Dim.PAD_SM)
-        self._confirm_pw = PasswordEntry(pw_card, label="Confirm New Password", width=300)
-        self._confirm_pw.pack(padx=Dim.PAD_LG, anchor="w")
+        self._current_pw = PasswordEntry(pw_card, label="Current Password")
+        self._current_pw.pack(fill="x", padx=Dim.PAD_LG, anchor="w")
+        self._new_pw = PasswordEntry(pw_card, label="New Password")
+        self._new_pw.pack(fill="x", padx=Dim.PAD_LG, anchor="w", pady=Dim.PAD_SM)
+        self._confirm_pw = PasswordEntry(pw_card, label="Confirm New Password")
+        self._confirm_pw.pack(fill="x", padx=Dim.PAD_LG, anchor="w")
 
         StyledButton(
             pw_card, text="Update Password", variant="outline", width=130,
             command=self._change_password,
         ).pack(anchor="w", padx=Dim.PAD_LG, pady=Dim.PAD_MD)
+
+        bind_smooth_scroll(scroll)
 
     def _save_profile(self):
         Toast(self, "Profile updated successfully", "success")

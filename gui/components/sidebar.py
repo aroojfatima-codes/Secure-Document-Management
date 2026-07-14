@@ -46,15 +46,25 @@ class SidebarItem(ctk.CTkFrame):
 
     def _enter(self, _=None):
         if not self._active:
-            self.configure(fg_color=C.bg_sidebar_hover)
-            self._icon.configure(text_color=C.text_primary)
-            self._text.configure(text_color=C.text_primary)
+            if getattr(self, "_danger", False):
+                self.configure(fg_color=C.danger_subtle)
+                self._icon.configure(text_color=C.danger)
+                self._text.configure(text_color=C.danger)
+            else:
+                self.configure(fg_color=C.bg_sidebar_hover)
+                self._icon.configure(text_color=C.text_primary)
+                self._text.configure(text_color=C.text_primary)
 
     def _leave(self, _=None):
         if not self._active:
-            self.configure(fg_color="transparent")
-            self._icon.configure(text_color=C.sidebar_text)
-            self._text.configure(text_color=C.sidebar_text)
+            if getattr(self, "_danger", False):
+                self.configure(fg_color="transparent")
+                self._icon.configure(text_color=C.danger)
+                self._text.configure(text_color=C.danger)
+            else:
+                self.configure(fg_color="transparent")
+                self._icon.configure(text_color=C.sidebar_text)
+                self._text.configure(text_color=C.sidebar_text)
 
     def set_active(self, active: bool):
         self._active = active
@@ -64,8 +74,12 @@ class SidebarItem(ctk.CTkFrame):
             self._text.configure(text_color=C.sidebar_active_text)
         else:
             self.configure(fg_color="transparent")
-            self._icon.configure(text_color=C.sidebar_text)
-            self._text.configure(text_color=C.sidebar_text)
+            if getattr(self, "_danger", False):
+                self._icon.configure(text_color=C.danger)
+                self._text.configure(text_color=C.danger)
+            else:
+                self._icon.configure(text_color=C.sidebar_text)
+                self._text.configure(text_color=C.sidebar_text)
 
     def set_expanded(self, expanded: bool):
         self._expanded = expanded
@@ -73,6 +87,12 @@ class SidebarItem(ctk.CTkFrame):
             self._text.pack(side="left", fill="x", expand=True, padx=(0, 12))
         else:
             self._text.pack_forget()
+
+    def set_danger_style(self):
+        """Apply danger/red styling for logout-type items."""
+        self._icon.configure(text_color=C.danger)
+        self._text.configure(text_color=C.danger)
+        self._danger = True
 
 
 class Sidebar(ctk.CTkFrame):
@@ -241,6 +261,7 @@ class Sidebar(ctk.CTkFrame):
             self._bottom, icon_text="\u2192", label="Logout",
             command=self._on_logout if self._on_logout else None,
         )
+        logout_item.set_danger_style()
         logout_item.pack(fill="x", padx=8, pady=1)
 
     def build_unauth_menu(self):

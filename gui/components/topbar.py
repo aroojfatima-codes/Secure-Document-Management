@@ -1,4 +1,4 @@
-"""Top navigation bar with search, theme toggle, user info, and breadcrumbs."""
+"""Top navigation bar with search, theme toggle, user info, logout, and breadcrumbs."""
 
 from __future__ import annotations
 from typing import Callable
@@ -69,8 +69,17 @@ class TopBar(ctk.CTkFrame):
         )
         self._user_label.pack(side="left")
 
+        self._logout_btn = ctk.CTkButton(
+            self._right, text="\u2192  Logout", font=Fonts.SMALL_BOLD,
+            fg_color="transparent", hover_color=C.danger_subtle,
+            text_color=C.danger, corner_radius=Dim.RADIUS_SM,
+            height=30, width=90, command=self._on_logout_click,
+        )
+
         self._on_toggle_cb: Callable | None = None
         self._on_theme_change_cb: Callable | None = None
+        self._on_logout_cb: Callable | None = None
+        self._logged_in = False
 
     def set_breadcrumb(self, text: str):
         self._breadcrumb.configure(text=text)
@@ -87,6 +96,17 @@ class TopBar(ctk.CTkFrame):
     def set_theme_change_callback(self, cb: Callable):
         self._on_theme_change_cb = cb
 
+    def set_logout_callback(self, cb: Callable):
+        self._on_logout_cb = cb
+
+    def set_logged_in(self, logged_in: bool):
+        """Show or hide the logout button in the topbar."""
+        self._logged_in = logged_in
+        if logged_in:
+            self._logout_btn.pack(side="left", padx=(12, 0))
+        else:
+            self._logout_btn.pack_forget()
+
     def _on_toggle(self):
         if self._on_toggle_cb:
             self._on_toggle_cb()
@@ -96,6 +116,10 @@ class TopBar(ctk.CTkFrame):
         self._theme_btn.configure(text="\u2600" if new_mode == "dark" else "\u263E")
         if self._on_theme_change_cb:
             self._on_theme_change_cb(new_mode)
+
+    def _on_logout_click(self):
+        if self._on_logout_cb:
+            self._on_logout_cb()
 
     def apply_theme(self):
         self.configure(fg_color=C.bg_topbar)
@@ -107,3 +131,6 @@ class TopBar(ctk.CTkFrame):
             text_color=C.text_secondary)
         self._avatar.configure(fg_color=C.primary)
         self._user_label.configure(text_color=C.text_primary)
+        self._logout_btn.configure(
+            fg_color="transparent", hover_color=C.danger_subtle,
+            text_color=C.danger)
