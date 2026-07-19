@@ -41,32 +41,28 @@ def main() -> None:
     storage_mgr = StorageManager()
     storage_mgr.initialise()
 
-    if "--cli" in sys.argv:
-        from cli.main import display_welcome, run_cli
-        display_welcome()
-        run_cli()
-    else:
-        from controllers.auth_controller import AuthController
-        from controllers.document_controller import DocumentController
-        from controllers.audit_controller import AuditController
-        from controllers.face_controller import FaceController
-        from gui.app import SDMSApp
+    try:
+        if "--cli" in sys.argv:
+            from cli.main import display_welcome, run_cli
+            display_welcome()
+            run_cli()
+        else:
+            from controllers.auth_controller import AuthController
+            from controllers.audit_controller import AuditController
+            from controllers.document_controller import DocumentController
+            from controllers.face_controller import FaceController
+            from gui.app import SDMSApp
 
-        auth_ctrl = AuthController()
-        doc_ctrl = DocumentController()
-        audit_ctrl = AuditController()
-        face_ctrl = FaceController()
-
-        app = SDMSApp(controller={
-            "auth": auth_ctrl,
-            "document": doc_ctrl,
-            "audit": audit_ctrl,
-            "face": face_ctrl,
-        })
-        app.mainloop()
-
-    db_manager.disconnect()
-    logger.info("%s shut down gracefully.", settings.APP_NAME)
+            app = SDMSApp(controller={
+                "auth": AuthController(),
+                "document": DocumentController(),
+                "audit": AuditController(),
+                "face": FaceController(),
+            })
+            app.mainloop()
+    finally:
+        db_manager.disconnect()
+        logger.info("%s shut down gracefully.", settings.APP_NAME)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 """Download page with file browser, filter, and progress."""
 
 from __future__ import annotations
+import os
 import customtkinter as ctk
 from gui.theme import ThemeManager, Dim, Fonts
 from gui.components.tables import StyledTable
@@ -15,6 +16,7 @@ C = tm.C
 
 class DownloadPage(ctk.CTkFrame):
     def __init__(self, master, **kw):
+        kw.pop("fg_color", None)
         super().__init__(master, fg_color=C.bg_main, **kw)
         self._documents = []
 
@@ -151,15 +153,28 @@ class DownloadPage(ctk.CTkFrame):
         self._post_frame.grid_remove()
 
     def _open_folder(self):
-        Toast(self, "Opening download folder...", "info")
+        try:
+            temp_path = os.path.join(os.getcwd(), "storage", "temp")
+            if os.path.exists(temp_path):
+                os.startfile(temp_path)
+            else:
+                Toast(self, "Download folder not found", "warning")
+        except Exception as e:
+            Toast(self, f"Cannot open folder: {e}", "error")
 
     def _go_back(self):
         if hasattr(self, '_app') and self._app:
-            self._app._navigate("documents")
+            try:
+                self._app._navigate("documents")
+            except Exception:
+                pass
 
     def _go_dashboard(self):
         if hasattr(self, '_app') and self._app:
-            self._app._navigate("dashboard")
+            try:
+                self._app._navigate("dashboard")
+            except Exception:
+                pass
 
     def apply_theme(self):
         self.configure(fg_color=C.bg_main)

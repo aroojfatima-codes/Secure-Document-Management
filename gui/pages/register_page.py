@@ -1,6 +1,7 @@
 """Registration page with multi-field form, password strength meter."""
 
 from __future__ import annotations
+import re
 import customtkinter as ctk
 from gui.theme import ThemeManager, Dim, Fonts
 from gui.components.forms import StyledEntry, PasswordEntry, StyledComboBox, StyledButton
@@ -10,9 +11,12 @@ from gui.smooth_scrolling import bind_smooth_scroll
 tm = ThemeManager()
 C = tm.C
 
+USERNAME_PATTERN = re.compile(r'^[a-zA-Z0-9_.-]+$')
+
 
 class RegisterPage(ctk.CTkFrame):
     def __init__(self, master, on_register=None, on_switch_login=None, **kw):
+        kw.pop("fg_color", None)
         super().__init__(master, fg_color=C.bg_main, **kw)
         self._on_register = on_register
         self._on_switch_login = on_switch_login
@@ -114,24 +118,27 @@ class RegisterPage(ctk.CTkFrame):
         bind_smooth_scroll(scroll)
 
     def _check_strength(self, _=None):
-        pw = self._password.get_value()
-        score = 0
-        if len(pw) >= 8:
-            score += 1
-        if any(c.isupper() for c in pw):
-            score += 1
-        if any(c.isdigit() for c in pw):
-            score += 1
-        if any(not c.isalnum() for c in pw):
-            score += 1
+        try:
+            pw = self._password.get_value()
+            score = 0
+            if len(pw) >= 8:
+                score += 1
+            if any(c.isupper() for c in pw):
+                score += 1
+            if any(c.isdigit() for c in pw):
+                score += 1
+            if any(not c.isalnum() for c in pw):
+                score += 1
 
-        levels = {0: (0, C.danger, "Very Weak"), 1: (0.25, C.danger, "Weak"),
-                  2: (0.5, C.warning, "Fair"), 3: (0.75, C.info, "Strong"),
-                  4: (1.0, C.success, "Very Strong")}
-        width, color, text = levels.get(score, (0, C.danger, "Very Weak"))
-        self._strength_bar.place(relx=0, rely=0, relwidth=width, relheight=1)
-        self._strength_bar.configure(fg_color=color)
-        self._strength_label.configure(text=text, text_color=color)
+            levels = {0: (0, C.danger, "Very Weak"), 1: (0.25, C.danger, "Weak"),
+                      2: (0.5, C.warning, "Fair"), 3: (0.75, C.info, "Strong"),
+                      4: (1.0, C.success, "Very Strong")}
+            width, color, text = levels.get(score, (0, C.danger, "Very Weak"))
+            self._strength_bar.place(relx=0, rely=0, relwidth=width, relheight=1)
+            self._strength_bar.configure(fg_color=color)
+            self._strength_label.configure(text=text, text_color=color)
+        except Exception:
+            pass
 
     def _do_register(self):
         u = self._username.get_value()
@@ -141,8 +148,20 @@ class RegisterPage(ctk.CTkFrame):
         p = self._password.get_value()
         c = self._confirm.get_value()
 
-        if not all([u, f, e, p]):
+        if not u or not f or not e or not p:
             self._error_label.configure(text="All fields are required")
+            return
+        if not USERNAME_PATTERN.match(u):
+            self._error_label.configure(text="Username: only letters, numbers, dots, dashes, underscores")
+            return
+        if len(u) < 3:
+            self._error_label.configure(text="Username must be at least 3 characters")
+            return
+        if "@" not in e or "." not in e:
+            self._error_label.configure(text="Please enter a valid email address")
+            return
+        if len(p) < 6:
+            self._error_label.configure(text="Password must be at least 6 characters")
             return
         if p != c:
             self._error_label.configure(text="Passwords do not match")
@@ -152,11 +171,17 @@ class RegisterPage(ctk.CTkFrame):
             return
         self._error_label.configure(text="")
         if self._on_register:
-            self._on_register(u, f, e, r, p)
+            try:
+                self._on_register(u, f, e, r, p)
+            except Exception as e:
+                Toast(self, f"Registration error: {e}", "error")
 
     def _switch(self):
         if self._on_switch_login:
-            self._on_switch_login()
+            try:
+                self._on_switch_login()
+            except Exception:
+                pass
 
     def apply_theme(self):
         self.configure(fg_color=C.bg_main)

@@ -12,6 +12,7 @@ C = tm.C
 class StyledEntry(ctk.CTkFrame):
     def __init__(self, master, label: str = "", placeholder: str = "",
                  show: str = "", width: int = 0, **kw):
+        kw.pop("fg_color", None)
         super().__init__(master, fg_color="transparent", **kw)
         if label:
             ctk.CTkLabel(
@@ -28,25 +29,48 @@ class StyledEntry(ctk.CTkFrame):
         self.entry.pack(fill="x")
 
     def get_value(self) -> str:
-        return self.entry.get().strip()
+        try:
+            return self.entry.get().strip()
+        except Exception:
+            return ""
 
     def set_value(self, v: str):
-        self.entry.delete(0, "end")
-        self.entry.insert(0, v)
+        try:
+            self.entry.delete(0, "end")
+            self.entry.insert(0, v)
+        except Exception:
+            pass
 
     def clear(self):
-        self.entry.delete(0, "end")
+        try:
+            self.entry.delete(0, "end")
+        except Exception:
+            pass
 
     def focus(self):
-        self.entry.focus_set()
+        try:
+            self.entry.focus_set()
+        except Exception:
+            pass
+
+    def configure(self, **kw):
+        try:
+            self.entry.configure(**kw)
+        except Exception:
+            pass
 
     def apply_theme(self):
-        self.entry.configure(fg_color=C.bg_input, border_color=C.border,
-                             text_color=C.text_primary)
+        try:
+            self.entry.configure(fg_color=C.bg_input, border_color=C.border,
+                                 text_color=C.text_primary,
+                                 placeholder_text_color=C.text_dim)
+        except Exception:
+            pass
 
 
 class PasswordEntry(ctk.CTkFrame):
     def __init__(self, master, label: str = "Password", width: int = 0, **kw):
+        kw.pop("fg_color", None)
         super().__init__(master, fg_color="transparent", **kw)
         if label:
             ctk.CTkLabel(
@@ -82,23 +106,37 @@ class PasswordEntry(ctk.CTkFrame):
         self._toggle.configure(text="\u25CB" if self._showing else "\u25C9")
 
     def get_value(self) -> str:
-        return self.entry.get().strip()
+        try:
+            return self.entry.get().strip()
+        except Exception:
+            return ""
 
     def clear(self):
-        self.entry.delete(0, "end")
+        try:
+            self.entry.delete(0, "end")
+        except Exception:
+            pass
 
     def focus(self):
-        self.entry.focus_set()
+        try:
+            self.entry.focus_set()
+        except Exception:
+            pass
 
     def apply_theme(self):
-        self.entry.configure(fg_color=C.bg_input, border_color=C.border,
-                             text_color=C.text_primary)
-        self._toggle.configure(fg_color=C.bg_input, hover_color=C.bg_sidebar_hover)
+        try:
+            self.entry.configure(fg_color=C.bg_input, border_color=C.border,
+                                 text_color=C.text_primary,
+                                 placeholder_text_color=C.text_dim)
+            self._toggle.configure(fg_color=C.bg_input, hover_color=C.bg_sidebar_hover)
+        except Exception:
+            pass
 
 
 class StyledComboBox(ctk.CTkFrame):
     def __init__(self, master, label: str = "", values: list[str] = None,
                  width: int = 0, **kw):
+        kw.pop("fg_color", None)
         super().__init__(master, fg_color="transparent", **kw)
         if not values:
             values = []
@@ -120,10 +158,16 @@ class StyledComboBox(ctk.CTkFrame):
             self.combo.set(values[0])
 
     def get_value(self) -> str:
-        return self.combo.get()
+        try:
+            return self.combo.get()
+        except Exception:
+            return ""
 
     def set_value(self, v: str):
-        self.combo.set(v)
+        try:
+            self.combo.set(v)
+        except Exception:
+            pass
 
 
 class StyledButton(ctk.CTkButton):
@@ -146,7 +190,6 @@ class StyledButton(ctk.CTkButton):
         fg, hover, tc = colors
         bd = 1 if variant == "outline" else 0
 
-        # Let caller kwargs override variant defaults
         fg = kw.pop("fg_color", fg)
         hover = kw.pop("hover_color", hover)
         tc = kw.pop("text_color", tc)
@@ -165,6 +208,7 @@ class StyledButton(ctk.CTkButton):
 class StyledText(ctk.CTkFrame):
     def __init__(self, master, label: str = "", height: int = 100,
                  width: int = 0, **kw):
+        kw.pop("fg_color", None)
         super().__init__(master, fg_color="transparent", **kw)
         if label:
             ctk.CTkLabel(
@@ -180,11 +224,20 @@ class StyledText(ctk.CTkFrame):
         self.textbox.pack(fill="x")
 
     def get_value(self) -> str:
-        return self.textbox.get("1.0", "end-1c").strip()
+        try:
+            return self.textbox.get("1.0", "end-1c").strip()
+        except Exception:
+            return ""
 
     def set_value(self, v: str):
-        self.textbox.delete("1.0", "end")
-        self.textbox.insert("1.0", v)
+        try:
+            self.textbox.delete("1.0", "end")
+            self.textbox.insert("1.0", v)
+        except Exception:
+            pass
 
     def clear(self):
-        self.textbox.delete("1.0", "end")
+        try:
+            self.textbox.delete("1.0", "end")
+        except Exception:
+            pass

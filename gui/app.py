@@ -1,26 +1,30 @@
-"""Main application controller — navigation, theming, sidebar toggle, page routing."""
+"""Main application controller -- navigation, theming, sidebar toggle, page routing."""
 
 from __future__ import annotations
+
+import traceback
+
 import customtkinter as ctk
-from gui.theme import ThemeManager, Dim, Fonts
+
+from gui.animations import fade_in
+from gui.components.dialogs import Toast
 from gui.components.sidebar import Sidebar
 from gui.components.topbar import TopBar
-from gui.components.dialogs import Toast
-from gui.pages.login_page import LoginPage
-from gui.pages.register_page import RegisterPage
+from gui.pages.audit_page import AuditPage
 from gui.pages.dashboard_page import DashboardPage
+from gui.pages.document_detail_page import DocumentDetailPage
 from gui.pages.documents_page import DocumentsPage
-from gui.pages.upload_page import UploadPage
 from gui.pages.download_page import DownloadPage
+from gui.pages.face_page import FacePage
+from gui.pages.login_page import LoginPage
+from gui.pages.profile_page import ProfilePage
+from gui.pages.register_page import RegisterPage
+from gui.pages.search_page import SearchPage
+from gui.pages.settings_page import SettingsPage
 from gui.pages.share_page import SharePage
 from gui.pages.shared_page import SharedPage
-from gui.pages.search_page import SearchPage
-from gui.pages.face_page import FacePage
-from gui.pages.audit_page import AuditPage
-from gui.pages.settings_page import SettingsPage
-from gui.pages.profile_page import ProfilePage
-from gui.pages.document_detail_page import DocumentDetailPage
-from gui.animations import fade_in
+from gui.pages.upload_page import UploadPage
+from gui.theme import Dim, ThemeManager
 
 tm = ThemeManager()
 C = tm.C
@@ -65,7 +69,6 @@ class App(ctk.CTk):
 
         self._topbar = TopBar(right)
         self._topbar.grid(row=0, column=0, sticky="ew")
-        self._topbar.set_toggle_callback(self._toggle_sidebar)
         self._topbar.set_theme_change_callback(self._change_theme)
         self._topbar.set_logout_callback(self._logout)
 
@@ -88,47 +91,67 @@ class App(ctk.CTk):
                 pass
 
     def _show_login(self):
-        self._clear_pages()
-        self._sidebar.build_unauth_menu()
+        self._clear_pages(destroy=True)
+        try:
+            self._sidebar.build_unauth_menu()
+        except Exception:
+            pass
         self._topbar.set_logged_in(False)
-        page = LoginPage(
-            self._page_container,
-            on_login=self._handle_login,
-            on_switch_register=lambda: self._show_register(),
-            on_face_login=self._handle_face_login,
-        )
-        page.grid(row=0, column=0, sticky="nsew")
-        self._page_cache["login"] = page
-        self._active_page_name = "login"
-        self._topbar.set_breadcrumb("Login")
-        fade_in(page)
+        try:
+            page = LoginPage(
+                self._page_container,
+                on_login=self._handle_login,
+                on_switch_register=lambda: self._show_register(),
+                on_face_login=self._handle_face_login,
+            )
+            page.grid(row=0, column=0, sticky="nsew")
+            self._page_cache["login"] = page
+            self._active_page_name = "login"
+            self._topbar.set_breadcrumb("Login")
+            fade_in(page)
+        except Exception as e:
+            traceback.print_exc()
+            Toast(self, f"Error loading login page: {e}", "error")
 
     def _show_register(self):
-        self._clear_pages()
-        page = RegisterPage(
-            self._page_container,
-            on_register=self._handle_register,
-            on_switch_login=lambda: self._show_login(),
-        )
-        page.grid(row=0, column=0, sticky="nsew")
-        self._page_cache["register"] = page
-        self._active_page_name = "register"
-        self._topbar.set_breadcrumb("Register")
-        fade_in(page)
+        self._clear_pages(destroy=True)
+        try:
+            page = RegisterPage(
+                self._page_container,
+                on_register=self._handle_register,
+                on_switch_login=lambda: self._show_login(),
+            )
+            page.grid(row=0, column=0, sticky="nsew")
+            self._page_cache["register"] = page
+            self._active_page_name = "register"
+            self._topbar.set_breadcrumb("Register")
+            fade_in(page)
+        except Exception as e:
+            traceback.print_exc()
+            Toast(self, f"Error loading register page: {e}", "error")
+
+    def _build_current_user(self, result: dict, fallback_username: str = "") -> dict:
+        """Extract user info dict from a login/face-login result."""
+        username = result.get("username", fallback_username)
+        return {
+            "user_id": result.get("user_id", ""),
+            "username": username,
+            "full_name": result.get("full_name", username.title()),
+            "role": result.get("role", "viewer"),
+            "email": result.get("email", ""),
+        }
 
     def _handle_login(self, username: str, password: str):
         if self.controller:
             try:
                 result = self.controller["auth"].login(username, password)
                 if result and result.get("success"):
-                    self._current_user = {
-                        "user_id": result.get("user_id", ""),
-                        "username": result.get("username", username),
-                        "full_name": result.get("full_name", result.get("username", username).title()),
-                        "role": result.get("role", "viewer"),
-                        "email": result.get("email", ""),
-                    }
-                    self._on_auth_success()
+                    self._current_user = self._build_current_user(result, username)
+                    try:
+                        self._on_auth_success()
+                    except Exception as e:
+                        traceback.print_exc()
+                        Toast(self, f"Dashboard failed to load: {e}", "error")
                     return
                 else:
                     error_msg = result.get("error", "Login failed") if result else "Login failed"
@@ -143,21 +166,23 @@ class App(ctk.CTk):
             "role": "admin",
             "email": f"{username}@example.com",
         }
-        self._on_auth_success()
+        try:
+            self._on_auth_success()
+        except Exception as e:
+            traceback.print_exc()
+            Toast(self, f"Dashboard failed to load: {e}", "error")
 
     def _handle_face_login(self):
         if self.controller:
             try:
                 result = self.controller["face"].login_face()
                 if result and result.get("success"):
-                    self._current_user = {
-                        "user_id": result.get("user_id", ""),
-                        "username": result.get("username", ""),
-                        "full_name": result.get("full_name", result.get("username", "User").title()),
-                        "role": result.get("role", "admin"),
-                        "email": result.get("email", ""),
-                    }
-                    self._on_auth_success()
+                    self._current_user = self._build_current_user(result)
+                    try:
+                        self._on_auth_success()
+                    except Exception as e:
+                        traceback.print_exc()
+                        Toast(self, f"Dashboard failed to load: {e}", "error")
                     return
                 else:
                     error_msg = result.get("error", "Face login failed") if result else "Face login failed"
@@ -187,7 +212,10 @@ class App(ctk.CTk):
 
     def _on_auth_success(self):
         Toast(self, f"Welcome, {self._current_user.get('full_name', self._current_user['username'])}!", "success")
-        self._sidebar.build_auth_menu(self._current_user)
+        try:
+            self._sidebar.build_auth_menu(self._current_user)
+        except Exception:
+            pass
         self._topbar.set_logged_in(True)
         self._page_cache.clear()
         self._navigate("dashboard")
@@ -204,51 +232,70 @@ class App(ctk.CTk):
         Toast(self, "Logged out successfully", "info")
 
     def _navigate(self, page_name: str):
-        if page_name == "login":
-            self._show_login()
-            return
-        if page_name == "register":
-            self._show_register()
-            return
-        if page_name == self._active_page_name and page_name in self._page_cache:
-            return
-        if page_name in self._page_cache:
-            self._show_cached_page(page_name)
-            return
-        page = self._create_page(page_name)
-        if page:
-            self._page_cache[page_name] = page
-            self._show_cached_page(page_name)
+        try:
+            if page_name == "login":
+                self._show_login()
+                return
+            if page_name == "register":
+                self._show_register()
+                return
+            if page_name == self._active_page_name and page_name in self._page_cache:
+                return
+            if page_name in self._page_cache:
+                self._show_cached_page(page_name)
+                return
+            page = self._create_page(page_name)
+            if page:
+                self._page_cache[page_name] = page
+                self._show_cached_page(page_name)
+            else:
+                Toast(self, f"Failed to create page '{page_name}'. Check logs for details.", "error")
+        except Exception as e:
+            traceback.print_exc()
+            Toast(self, f"Navigation error: {e}", "error")
 
     def _show_cached_page(self, name: str):
         self._clear_pages()
-        page = self._page_cache[name]
-        page.grid(row=0, column=0, sticky="nsew")
-        self._active_page_name = name
-        self._topbar.set_breadcrumb(self._breadcrumb_for(name))
-        u = self._current_user or {}
-        self._topbar.set_user(
-            u.get("full_name", u.get("username", "User")),
-            u.get("role", ""),
-        )
-        fade_in(page)
+        try:
+            page = self._page_cache.get(name)
+            if page is None or not page.winfo_exists():
+                self._page_cache.pop(name, None)
+                self._navigate(name)
+                return
+            page.grid(row=0, column=0, sticky="nsew")
+            self._active_page_name = name
+            self._topbar.set_breadcrumb(self._breadcrumb_for(name))
+            u = self._current_user or {}
+            self._topbar.set_user(
+                u.get("full_name", u.get("username", "User")),
+                u.get("role", ""),
+            )
+            fade_in(page)
+        except Exception as e:
+            traceback.print_exc()
+            Toast(self, f"Error showing page '{name}': {e}", "error")
 
     def _create_page(self, name: str):
         u = self._current_user or {}
         ctrl = self.controller
+
+        def _load_docs_for_page(page, method="list_my_documents"):
+            """Load documents into a page that has a load_documents method."""
+            if ctrl:
+                try:
+                    result = getattr(ctrl["document"], method)(1, 50)
+                    docs = result.get("documents", []) if result and result.get("success") else []
+                    page.load_documents(docs)
+                except Exception:
+                    pass
 
         def _make_dashboard():
             return DashboardPage(self._page_container, user=u)
 
         def _make_documents():
             page = DocumentsPage(self._page_container)
-            if ctrl:
-                try:
-                    result = ctrl["document"].list_my_documents(1, 50)
-                    docs = result.get("documents", []) if result and result.get("success") else []
-                    page.load_documents(docs)
-                except Exception:
-                    pass
+            page._app = self
+            _load_docs_for_page(page)
             return page
 
         def _make_document_detail():
@@ -257,81 +304,30 @@ class App(ctk.CTk):
         def _make_upload():
             page = UploadPage(self._page_container)
             page._app = self
-            original_animate = page._animate_upload
-
-            def enhanced_animate(step=0):
-                if step <= 10:
-                    page._progress_bar.set_progress(step / 10)
-                    page._progress_label.configure(text=f"Uploading... {step * 10}%")
-                    page.after(200, lambda: enhanced_animate(step + 1))
-                else:
-                    page._progress_label.configure(text="Upload complete!")
-                    page._progress_frame.grid_remove()
-                    if ctrl:
-                        try:
-                            result = ctrl["document"].upload(page._selected_path)
-                            if result and result.get("success"):
-                                doc_id = result.get("document_id", "DOC-XXXX")
-                                page.set_upload_result(doc_id)
-                                page._show_success(doc_id)
-                                Toast(self, f"Document uploaded! ID: {doc_id}", "success")
-                            else:
-                                error_msg = result.get("error", "Upload failed") if result else "Upload failed"
-                                Toast(self, error_msg, "error")
-                        except Exception as e:
-                            Toast(self, f"Upload error: {e}", "error")
-                    else:
-                        page._show_success("DOC-0001")
-
-            page._animate_upload = enhanced_animate
             return page
 
         def _make_download():
             page = DownloadPage(self._page_container)
             page._app = self
-            if ctrl:
-                try:
-                    result = ctrl["document"].list_my_documents(1, 50)
-                    docs = result.get("documents", []) if result and result.get("success") else []
-                    page.load_documents(docs)
-                except Exception:
-                    pass
+            _load_docs_for_page(page)
             return page
 
         def _make_share():
             page = SharePage(self._page_container)
             page._app = self
-            if ctrl:
-                try:
-                    result = ctrl["document"].list_my_documents(1, 50)
-                    docs = result.get("documents", []) if result and result.get("success") else []
-                    page.load_documents(docs)
-                except Exception:
-                    pass
+            _load_docs_for_page(page)
             return page
 
         def _make_shared():
             page = SharedPage(self._page_container)
             page._app = self
-            if ctrl:
-                try:
-                    result = ctrl["document"].list_shared_with_me(1, 50)
-                    shared = result.get("documents", []) if result and result.get("success") else []
-                    page.load_shared(shared)
-                except Exception:
-                    pass
+            _load_docs_for_page(page, "list_shared_with_me")
             return page
 
         def _make_search():
             page = SearchPage(self._page_container)
             page._app = self
-            if ctrl:
-                try:
-                    result = ctrl["document"].list_my_documents(1, 50)
-                    docs = result.get("documents", []) if result and result.get("success") else []
-                    page.load_documents(docs)
-                except Exception:
-                    pass
+            _load_docs_for_page(page)
             return page
 
         def _make_face():
@@ -385,7 +381,14 @@ class App(ctk.CTk):
             "profile": _make_profile,
         }
         factory = pages.get(name)
-        return factory() if factory else None
+        if factory:
+            try:
+                return factory()
+            except Exception as e:
+                traceback.print_exc()
+                Toast(self, f"Error creating page '{name}': {e}", "error")
+                return None
+        return None
 
     def _breadcrumb_for(self, name: str) -> str:
         titles = {
@@ -405,14 +408,20 @@ class App(ctk.CTk):
         return titles.get(name, name.title())
 
     def _toggle_sidebar(self):
-        self._sidebar_expanded = not self._sidebar_expanded
-        target = Dim.SIDEBAR_W if self._sidebar_expanded else Dim.SIDEBAR_COLLAPSED_W
-        self._sidebar.animate_width(target)
+        try:
+            self._sidebar_expanded = not self._sidebar_expanded
+            target = Dim.SIDEBAR_W if self._sidebar_expanded else Dim.SIDEBAR_COLLAPSED_W
+            self._sidebar.animate_width(target)
+        except Exception:
+            self._sidebar_expanded = True
 
     def _change_theme(self, mode: str):
-        tm.set_mode(mode)
-        self.configure(fg_color=C.bg_main)
-        self._apply_theme_recursive(self)
+        try:
+            tm.set_mode(mode)
+            self.configure(fg_color=C.bg_main)
+            self._apply_theme_recursive(self)
+        except Exception:
+            pass
 
     def _apply_theme_recursive(self, widget):
         try:
@@ -420,12 +429,27 @@ class App(ctk.CTk):
                 widget.apply_theme()
         except Exception:
             pass
-        for child in widget.winfo_children():
-            self._apply_theme_recursive(child)
+        try:
+            for child in widget.winfo_children():
+                self._apply_theme_recursive(child)
+        except Exception:
+            pass
 
-    def _clear_pages(self):
+    def _clear_pages(self, destroy: bool = False):
+        """Hide page widgets in the page container.
+
+        If destroy=True, also destroy them and clear the cache.
+        """
         for child in self._page_container.winfo_children():
-            child.grid_forget()
+            try:
+                child.grid_forget()
+                if destroy:
+                    child.destroy()
+            except Exception:
+                pass
+        if destroy:
+            self._page_cache.clear()
+            self._active_page_name = ""
 
     def _on_close(self):
         if self.controller:

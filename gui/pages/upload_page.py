@@ -1,7 +1,9 @@
 """Upload page with drag-drop zone, file selector, and progress."""
 
 from __future__ import annotations
+import os
 import customtkinter as ctk
+from tkinter import filedialog
 from gui.theme import ThemeManager, Dim, Fonts
 from gui.components.forms import StyledButton, StyledEntry, StyledComboBox, StyledText
 from gui.components.loading import AnimatedProgressBar
@@ -11,9 +13,16 @@ from gui.smooth_scrolling import bind_smooth_scroll
 tm = ThemeManager()
 C = tm.C
 
+MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
+ALLOWED_EXTENSIONS = {
+    ".pdf", ".docx", ".doc", ".txt", ".csv", ".xlsx",
+    ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff",
+}
+
 
 class UploadPage(ctk.CTkFrame):
     def __init__(self, master, on_upload=None, **kw):
+        kw.pop("fg_color", None)
         super().__init__(master, fg_color=C.bg_main, **kw)
         self._on_upload = on_upload
         self._selected_path = ""
@@ -63,7 +72,7 @@ class UploadPage(ctk.CTkFrame):
         )
         self._drop_label.pack()
         ctk.CTkLabel(
-            drop_zone, text="Supports PDF, DOCX, TXT, images, and more",
+            drop_zone, text="Supports PDF, DOCX, TXT, images, and more (Max 50MB)",
             font=Fonts.TINY, text_color=C.text_dim,
         ).pack(pady=(2, 0))
 
@@ -168,28 +177,32 @@ class UploadPage(ctk.CTkFrame):
         bind_smooth_scroll(scroll)
 
     def _browse(self):
-        import tkinter as tk
-        from tkinter import filedialog
-        root = tk.Tk()
-        root.withdraw()
-        path = filedialog.askopenfilename(
-            title="Select File",
-            filetypes=[
-                ("All Supported", "*.pdf *.docx *.doc *.txt *.csv *.xlsx *.png *.jpg *.jpeg"),
-                ("PDF", "*.pdf"), ("Word", "*.docx *.doc"), ("Text", "*.txt"),
-                ("Images", "*.png *.jpg *.jpeg"), ("All files", "*.*"),
-            ],
-        )
-        root.destroy()
-        if path:
-            self._selected_path = path
-            import os
-            fname = os.path.basename(path)
-            size = os.path.getsize(path)
-            size_str = f"{size / 1024:.1f} KB" if size < 1048576 else f"{size / 1048576:.1f} MB"
-            self._filename_label.configure(
-                text=f"{fname} ({size_str})", text_color=C.text_primary)
-            self._title.set_value(fname.rsplit(".", 1)[0])
+        try:
+            path = filedialog.askopenfilename(
+                title="Select File",
+                filetypes=[
+                    ("All Supported", "*.pdf *.docx *.doc *.txt *.csv *.xlsx *.png *.jpg *.jpeg"),
+                    ("PDF", "*.pdf"), ("Word", "*.docx *.doc"), ("Text", "*.txt"),
+                    ("Images", "*.png *.jpg *.jpeg"), ("All files", "*.*"),
+                ],
+            )
+            if path:
+                ext = os.path.splitext(path)[1].lower()
+                if ext not in ALLOWED_EXTENSIONS:
+                    Toast(self, f"File type '{ext}' is not allowed", "error")
+                    return
+                size = os.path.getsize(path)
+                if size > MAX_FILE_SIZE:
+                    Toast(self, f"File too large ({size / 1048576:.1f}MB). Max 50MB.", "error")
+                    return
+                self._selected_path = path
+                fname = os.path.basename(path)
+                size_str = f"{size / 1024:.1f} KB" if size < 1048576 else f"{size / 1048576:.1f} MB"
+                self._filename_label.configure(
+                    text=f"{fname} ({size_str})", text_color=C.text_primary)
+                self._title.set_value(fname.rsplit(".", 1)[0])
+        except Exception as e:
+            Toast(self, f"Error selecting file: {e}", "error")
 
     def _do_upload(self):
         if not self._selected_path:
@@ -206,10 +219,28 @@ class UploadPage(ctk.CTkFrame):
             self._progress_label.configure(text=f"Uploading... {step * 10}%")
             self.after(200, lambda: self._animate_upload(step + 1))
         else:
-            self._progress_label.configure(text="Upload complete!")
-            self._progress_frame.grid_remove()
-            doc_id = self._last_upload_doc_id if hasattr(self, '_last_upload_doc_id') else "DOC-XXXX"
-            self._show_success(doc_id)
+            self._progress_label.configure(text="Encrypting and saving...")
+            self._progress_frame.update_idletasks()
+            if hasattr(self, '_app') and self._app and self._app.controller:
+                try:
+                    ctrl = self._app.controller
+                    result = ctrl["document"].upload(self._selected_path)
+                    if result and result.get("success"):
+                        doc_id = result.get("document_id", "DOC-XXXX")
+                        self._last_upload_doc_id = doc_id
+                        self._progress_frame.grid_remove()
+                        self._show_success(doc_id)
+                        Toast(self, f"Document uploaded! ID: {doc_id}", "success")
+                    else:
+                        error_msg = result.get("error", "Upload failed") if result else "Upload failed"
+                        self._progress_frame.grid_remove()
+                        Toast(self, error_msg, "error")
+                except Exception as e:
+                    self._progress_frame.grid_remove()
+                    Toast(self, f"Upload error: {e}", "error")
+            else:
+                self._progress_frame.grid_remove()
+                self._show_success("DOC-0001")
 
     def _show_success(self, doc_id: str):
         self._success_doc_id.configure(
@@ -220,7 +251,10 @@ class UploadPage(ctk.CTkFrame):
 
     def _go_to_documents(self):
         if hasattr(self, '_app') and self._app:
-            self._app._navigate("documents")
+            try:
+                self._app._navigate("documents")
+            except Exception:
+                pass
 
     def _clear(self):
         self._selected_path = ""

@@ -13,6 +13,7 @@ C = tm.C
 
 class LoginPage(ctk.CTkFrame):
     def __init__(self, master, on_login=None, on_switch_register=None, on_face_login=None, **kw):
+        kw.pop("fg_color", None)
         super().__init__(master, fg_color=C.bg_main, **kw)
         self._on_login = on_login
         self._on_switch_register = on_switch_register
@@ -31,9 +32,6 @@ class LoginPage(ctk.CTkFrame):
         card = self._build_card(center)
         card.grid(row=0, column=0, padx=Dim.PAD_XL, pady=Dim.PAD_XL)
 
-    # ------------------------------------------------------------------
-    # Animated background
-    # ------------------------------------------------------------------
     def _build_bg_animation(self, parent):
         bg = ctk.CTkFrame(parent, fg_color=C.bg_main)
         bg.place(relx=0, rely=0, relwidth=1, relheight=1)
@@ -49,41 +47,47 @@ class LoginPage(ctk.CTkFrame):
             {"x": 400, "y": 200, "vx": 0.3, "vy": -0.55, "r": 100},
         ]
         self._tick = 0
+        self._animating = True
         self._animate_bg()
 
     def _animate_bg(self):
-        canvas_w = max(self._bg_canvas.winfo_width(), 400)
-        canvas_h = max(self._bg_canvas.winfo_height(), 400)
+        if not self._animating:
+            return
+        try:
+            canvas_w = max(self._bg_canvas.winfo_width(), 400)
+            canvas_h = max(self._bg_canvas.winfo_height(), 400)
 
-        for orb in self._orbs:
-            orb["x"] += orb["vx"]
-            orb["y"] += orb["vy"]
+            for orb in self._orbs:
+                orb["x"] += orb["vx"]
+                orb["y"] += orb["vy"]
 
-            if orb["x"] - orb["r"] < 0 or orb["x"] + orb["r"] > canvas_w:
-                orb["vx"] = -orb["vx"]
-                orb["x"] = max(orb["r"], min(orb["x"], canvas_w - orb["r"]))
-            if orb["y"] - orb["r"] < 0 or orb["y"] + orb["r"] > canvas_h:
-                orb["vy"] = -orb["vy"]
-                orb["y"] = max(orb["r"], min(orb["y"], canvas_h - orb["r"]))
+                if orb["x"] - orb["r"] < 0 or orb["x"] + orb["r"] > canvas_w:
+                    orb["vx"] = -orb["vx"]
+                    orb["x"] = max(orb["r"], min(orb["x"], canvas_w - orb["r"]))
+                if orb["y"] - orb["r"] < 0 or orb["y"] + orb["r"] > canvas_h:
+                    orb["vy"] = -orb["vy"]
+                    orb["y"] = max(orb["r"], min(orb["y"], canvas_h - orb["r"]))
 
-        self._tick += 1
-        self._draw_orbs()
-        self.after(50, self._animate_bg)
+            self._tick += 1
+            self._draw_orbs()
+            self.after(50, self._animate_bg)
+        except Exception:
+            self._animating = False
 
     def _draw_orbs(self):
-        self._bg_canvas.delete("all")
-        colors = [C.primary_dark, C.accent_blue, C.accent_purple]
-        for i, orb in enumerate(self._orbs):
-            x, y, r = orb["x"], orb["y"], orb["r"]
-            pulse = r + 5 * math.sin(self._tick * 0.08 + i * 2)
-            self._bg_canvas.create_oval(
-                x - pulse, y - pulse, x + pulse, y + pulse,
-                fill=colors[i % len(colors)], outline="", width=0,
-            )
+        try:
+            self._bg_canvas.delete("all")
+            colors = [C.primary_dark, C.accent_blue, C.accent_purple]
+            for i, orb in enumerate(self._orbs):
+                x, y, r = orb["x"], orb["y"], orb["r"]
+                pulse = r + 5 * math.sin(self._tick * 0.08 + i * 2)
+                self._bg_canvas.create_oval(
+                    x - pulse, y - pulse, x + pulse, y + pulse,
+                    fill=colors[i % len(colors)], outline="", width=0,
+                )
+        except Exception:
+            pass
 
-    # ------------------------------------------------------------------
-    # Card
-    # ------------------------------------------------------------------
     def _build_card(self, parent) -> ctk.CTkFrame:
         card = ctk.CTkFrame(
             parent, fg_color=C.bg_card_translucent, corner_radius=Dim.RADIUS_XL,
@@ -155,7 +159,7 @@ class LoginPage(ctk.CTkFrame):
 
         StyledButton(
             card, text="Login with Face Recognition", height=40,
-            fg_color=C.accent_purple, hover_color=C.accent_purple,
+            fg_color=C.accent_purple, hover_color=C.primary_dark,
             command=self._on_face_login_click,
         ).grid(row=6, column=0, sticky="ew", padx=Dim.PAD_XL, pady=(0, Dim.PAD_MD))
 
@@ -173,9 +177,6 @@ class LoginPage(ctk.CTkFrame):
 
         return card
 
-    # ------------------------------------------------------------------
-    # Callbacks
-    # ------------------------------------------------------------------
     def _do_login(self):
         u = self._username.get_value()
         p = self._password.get_value()
@@ -184,24 +185,31 @@ class LoginPage(ctk.CTkFrame):
             return
         self._error_label.configure(text="")
         if self._on_login:
-            self._on_login(u, p)
+            try:
+                self._on_login(u, p)
+            except Exception as e:
+                Toast(self, f"Login error: {e}", "error")
 
     def _on_face_login_click(self):
         if self._on_face_login:
-            self._on_face_login()
+            try:
+                self._on_face_login()
+            except Exception as e:
+                Toast(self, f"Face login error: {e}", "error")
 
     def _switch(self):
         if self._on_switch_register:
-            self._on_switch_register()
+            try:
+                self._on_switch_register()
+            except Exception:
+                pass
 
     def _forgot(self):
         Toast(self, "Contact admin to reset password.", "info")
 
+    def destroy(self):
+        self._animating = False
+        super().destroy()
+
     def apply_theme(self):
         self.configure(fg_color=C.bg_main)
-        for w in self.winfo_children():
-            if hasattr(w, "configure"):
-                try:
-                    w.configure(fg_color=C.bg_main)
-                except Exception:
-                    pass

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 import customtkinter as ctk
 
@@ -23,6 +23,7 @@ class DocumentDetailPage(ctk.CTkFrame):
     """Show detailed metadata for a single document."""
 
     def __init__(self, master, app: "App | None" = None, **kwargs) -> None:
+        kwargs.pop("fg_color", None)
         super().__init__(master, fg_color=C.bg_main, **kwargs)
         self._app = app
         self._doc_id: str = ""
@@ -30,7 +31,7 @@ class DocumentDetailPage(ctk.CTkFrame):
         header = PageHeader(
             self,
             title="Document Details",
-            actions=[("Back to Documents", lambda: self._app._navigate("documents"))],
+            actions=[("Back to Documents", self._go_back)],
         )
         header.pack(fill="x", padx=Dim.PAD_XL, pady=(Dim.PAD_XL, 0))
 
@@ -42,26 +43,56 @@ class DocumentDetailPage(ctk.CTkFrame):
         self._scroll.pack(fill="both", expand=True, padx=Dim.PAD_XL, pady=Dim.PAD_MD)
         bind_smooth_scroll(self._scroll)
 
+        # Show a placeholder if no document is loaded yet
+        ctk.CTkLabel(
+            self._scroll, text="Select a document to view its details",
+            font=Fonts.BODY, text_color=C.text_secondary,
+        ).pack(pady=Dim.PAD_XL)
+
+    def _go_back(self):
+        if self._app:
+            try:
+                self._app._navigate("documents")
+            except Exception:
+                pass
+
     def refresh(self, document_id: str = "") -> None:
         if document_id:
             self._doc_id = document_id
 
         for w in self._scroll.winfo_children():
-            w.destroy()
+            try:
+                w.destroy()
+            except Exception:
+                pass
 
-        ctrl = self._app.controller
+        ctrl = None
+        if self._app:
+            ctrl = self._app.controller
         if not ctrl:
-            Toast(self, "No controller available", "error")
+            # Show placeholder when no controller
+            ctk.CTkLabel(
+                self._scroll, text="No controller available",
+                font=Fonts.BODY, text_color=C.danger,
+            ).pack(pady=Dim.PAD_XL)
             return
 
         try:
             result = ctrl["document"].get_document_detail(self._doc_id)
         except Exception as exc:
             Toast(self, f"Failed to load document: {exc}", "error")
+            ctk.CTkLabel(
+                self._scroll, text=f"Error: {exc}",
+                font=Fonts.BODY, text_color=C.danger,
+            ).pack(pady=Dim.PAD_XL)
             return
 
         if not result or not result.get("success"):
             Toast(self, "Failed to load document.", "error")
+            ctk.CTkLabel(
+                self._scroll, text="Document not found",
+                font=Fonts.BODY, text_color=C.text_secondary,
+            ).pack(pady=Dim.PAD_XL)
             return
 
         doc = result.get("document", result)
@@ -98,19 +129,34 @@ class DocumentDetailPage(ctk.CTkFrame):
 
         StyledButton(
             actions, text="Back to Documents", variant="outline",
-            command=lambda: self._app._navigate("documents"), width=160,
+            command=self._go_back, width=160,
         ).pack(side="left", padx=(0, 8))
 
         StyledButton(
             actions, text="Dashboard",
-            command=lambda: self._app._navigate("dashboard"), width=120,
+            command=self._go_dashboard, width=120,
         ).pack(side="right")
 
     def _download(self) -> None:
-        self._app._navigate("download")
+        if self._app:
+            try:
+                self._app._navigate("download")
+            except Exception:
+                pass
 
     def _share(self) -> None:
-        self._app._navigate("share")
+        if self._app:
+            try:
+                self._app._navigate("share")
+            except Exception:
+                pass
+
+    def _go_dashboard(self) -> None:
+        if self._app:
+            try:
+                self._app._navigate("dashboard")
+            except Exception:
+                pass
 
     def apply_theme(self):
         self.configure(fg_color=C.bg_main)

@@ -5,7 +5,7 @@ import customtkinter as ctk
 from tkinter import Menu
 from gui.theme import ThemeManager, Dim, Fonts
 from gui.components.tables import StyledTable
-from gui.components.forms import StyledButton, StyledEntry
+from gui.components.forms import StyledEntry
 from gui.components.dialogs import ConfirmDialog, Toast
 from gui.smooth_scrolling import bind_smooth_scroll
 
@@ -13,7 +13,7 @@ tm = ThemeManager()
 C = tm.C
 
 def _file_colors() -> dict[str, str]:
-    c = ThemeManager().C
+    c = C
     return {
         "pdf": c.danger, "doc": c.info, "docx": c.info,
         "png": c.warning, "jpg": c.warning, "jpeg": c.warning,
@@ -23,11 +23,13 @@ def _file_colors() -> dict[str, str]:
 
 class DocumentsPage(ctk.CTkFrame):
     def __init__(self, master, on_refresh=None, **kw):
+        kw.pop("fg_color", None)
         super().__init__(master, fg_color=C.bg_main, **kw)
         self._on_refresh = on_refresh
         self._view_mode = "grid"
         self._all_documents = []
         self._documents = []
+        self._app = None
 
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
@@ -178,7 +180,16 @@ class DocumentsPage(ctk.CTkFrame):
         return card
 
     def _on_select(self, doc: dict):
-        pass
+        if hasattr(self, '_app') and self._app:
+            try:
+                doc_id = doc.get("document_id", "")
+                page = self._app._create_page("document_detail")
+                if page:
+                    self._app._page_cache["document_detail"] = page
+                    page.refresh(doc_id)
+                    self._app._show_cached_page("document_detail")
+            except Exception:
+                pass
 
     def _on_download(self, doc: dict):
         Toast(self, f"Downloading {doc.get('original_filename', doc.get('filename', 'file'))}...", "info")
@@ -205,9 +216,7 @@ class DocumentsPage(ctk.CTkFrame):
             label="Download", command=lambda: self._on_download(doc))
         self._context_menu.add_separator()
         self._context_menu.add_command(
-            label="Share", command=lambda: Toast(self, "Share dialog coming soon", "info"))
-        self._context_menu.add_command(
-            label="Rename", command=lambda: Toast(self, "Rename dialog coming soon", "info"))
+            label="Share", command=lambda: self._navigate_to("share"))
         self._context_menu.add_separator()
         self._context_menu.add_command(
             label="Delete",
@@ -215,7 +224,17 @@ class DocumentsPage(ctk.CTkFrame):
                 self, f"Delete '{doc.get('original_filename', doc.get('filename', 'file'))}'?",
                 on_yes=lambda: Toast(self, "File deleted", "success"),
             ))
-        self._context_menu.tk_popup(event.x_root, event.y_root)
+        try:
+            self._context_menu.tk_popup(event.x_root, event.y_root)
+        except Exception:
+            pass
+
+    def _navigate_to(self, page_name: str):
+        if hasattr(self, '_app') and self._app:
+            try:
+                self._app._navigate(page_name)
+            except Exception:
+                pass
 
     def _filter_docs(self, _=None):
         q = self._search.get_value().lower()

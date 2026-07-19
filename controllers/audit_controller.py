@@ -1,9 +1,11 @@
+"""Audit controller -- handles audit log viewing and searching."""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
 
-from exceptions.custom_exceptions import AuthenticationError
+from exceptions.custom_exceptions import AuthenticationError, SDMSException
 from logger.logging_config import get_logger
 from models.audit import AuditAction, OperationStatus, ResourceType, SeverityLevel
 from services.audit_service import AuditService
@@ -12,8 +14,29 @@ logger = get_logger(__name__)
 
 
 class AuditController:
+    """Coordinates audit log viewing workflows.
+
+    Usage::
+
+        ctrl = AuditController()
+        result = ctrl.view_audit_logs(action="USER_LOGIN")
+    """
+
     def __init__(self) -> None:
         self._audit_service: AuditService = AuditService()
+
+    @staticmethod
+    def _parse_date(date_str: str | None) -> tuple[datetime | None, str | None]:
+        """Parse an ISO date string, returning (datetime, error_message)."""
+        if not date_str:
+            return None, None
+        try:
+            dt = datetime.fromisoformat(date_str)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt, None
+        except ValueError:
+            return None, f"Invalid date format '{date_str}'. Use YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS."
 
     def view_audit_logs(
         self,
@@ -27,42 +50,21 @@ class AuditController:
         page: int = 1,
         per_page: int = 50,
     ) -> dict[str, Any]:
+        """Query audit logs with optional filters and pagination."""
         try:
-            parsed_date_from: datetime | None = None
-            parsed_date_to: datetime | None = None
+            parsed_from, err = self._parse_date(date_from)
+            if err:
+                return {"success": False, "error": err}
 
-            if date_from:
-                try:
-                    parsed_date_from = datetime.fromisoformat(date_from)
-                    if parsed_date_from.tzinfo is None:
-                        parsed_date_from = parsed_date_from.replace(tzinfo=timezone.utc)
-                except ValueError:
-                    return {
-                        "success": False,
-                        "error": "Invalid date_from format. Use YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS.",
-                    }
-
-            if date_to:
-                try:
-                    parsed_date_to = datetime.fromisoformat(date_to)
-                    if parsed_date_to.tzinfo is None:
-                        parsed_date_to = parsed_date_to.replace(tzinfo=timezone.utc)
-                except ValueError:
-                    return {
-                        "success": False,
-                        "error": "Invalid date_to format. Use YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS.",
-                    }
+            parsed_to, err = self._parse_date(date_to)
+            if err:
+                return {"success": False, "error": err}
 
             result = self._audit_service.query_logs(
-                username=username,
-                action=action,
-                severity=severity,
-                resource_type=resource_type,
-                status=status,
-                date_from=parsed_date_from,
-                date_to=parsed_date_to,
-                page=page,
-                per_page=per_page,
+                username=username, action=action, severity=severity,
+                resource_type=resource_type, status=status,
+                date_from=parsed_from, date_to=parsed_to,
+                page=page, per_page=per_page,
             )
 
             if result.get("success"):
@@ -77,8 +79,8 @@ class AuditController:
             return result
 
         except AuthenticationError as exc:
-            logger.warning("Audit log view denied — not authenticated.")
+            logger.warning("Audit log view denied -- not authenticated.")
             return {"success": False, "error": str(exc)}
-        except Exception as exc:
+        except SDMSException as exc:
             logger.error("Audit log view failed: %s", exc)
             return {"success": False, "error": f"Audit log view failed: {exc}"}

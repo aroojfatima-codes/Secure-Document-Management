@@ -1,3 +1,5 @@
+"""Public re-exports for gui.pages."""
+
 from gui.pages.login_page import LoginPage
 from gui.pages.register_page import RegisterPage
 from gui.pages.dashboard_page import DashboardPage
@@ -12,3 +14,12 @@ from gui.pages.face_page import FacePage
 from gui.pages.audit_page import AuditPage
 from gui.pages.settings_page import SettingsPage
 from gui.pages.profile_page import ProfilePage
+
+__all__ = [
+    "LoginPage", "RegisterPage", "DashboardPage",
+    "DocumentsPage", "DocumentDetailPage",
+    "UploadPage", "DownloadPage",
+    "SharePage", "SharedPage", "SearchPage",
+    "FacePage", "AuditPage",
+    "SettingsPage", "ProfilePage",
+]

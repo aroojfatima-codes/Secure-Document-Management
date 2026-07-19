@@ -1,7 +1,7 @@
 """Styled Treeview table with sorting, selection, and scrollbar."""
 
 from __future__ import annotations
-from typing import Any, Callable
+from typing import Any
 import customtkinter as ctk
 from tkinter import ttk
 from gui.theme import ThemeManager, Dim, Fonts
@@ -12,6 +12,8 @@ C = tm.C
 
 class StyledTable(ctk.CTkFrame):
     def __init__(self, master, columns: list[tuple[str, str, int]], **kw):
+        kw.pop("fg_color", None)
+        kw.pop("corner_radius", None)
         super().__init__(master, fg_color=C.bg_card,
                          corner_radius=Dim.RADIUS_LG, **kw)
 

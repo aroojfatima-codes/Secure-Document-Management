@@ -7,7 +7,6 @@ Every GUI module imports from here for consistent styling.
 from __future__ import annotations
 
 import customtkinter as ctk
-from typing import Any
 
 
 class _ThemeColors:

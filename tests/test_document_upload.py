@@ -34,12 +34,6 @@ def create_temp_file(content: bytes = b"Hello, SDMS upload test!") -> str:
         return f.name
 
 
-def create_large_file(size_bytes: int) -> str:
-    """Create a temporary file with *size_bytes* of data."""
-    content = b"X" * size_bytes
-    return create_temp_file(content)
-
-
 # ======================================================================
 # DocumentUploadService
 # ======================================================================

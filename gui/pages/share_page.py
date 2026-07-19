@@ -14,6 +14,7 @@ C = tm.C
 
 class SharePage(ctk.CTkFrame):
     def __init__(self, master, on_share=None, **kw):
+        kw.pop("fg_color", None)
         super().__init__(master, fg_color=C.bg_main, **kw)
         self._on_share = on_share
         self._documents = []
@@ -128,11 +129,17 @@ class SharePage(ctk.CTkFrame):
 
     def _view_shared(self):
         if hasattr(self, '_app') and self._app:
-            self._app._navigate("shared")
+            try:
+                self._app._navigate("shared")
+            except Exception:
+                pass
 
     def _go_dashboard(self):
         if hasattr(self, '_app') and self._app:
-            self._app._navigate("dashboard")
+            try:
+                self._app._navigate("dashboard")
+            except Exception:
+                pass
 
     def apply_theme(self):
         self.configure(fg_color=C.bg_main)

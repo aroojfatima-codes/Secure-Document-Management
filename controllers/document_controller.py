@@ -47,6 +47,33 @@ class DocumentController:
         self._sharing_service: DocumentSharingService = DocumentSharingService()
         self._audit_service: AuditService = AuditService()
 
+    def _safe_call(
+        self, fn: Any, default: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Execute *fn* and convert exceptions to error dicts."""
+        try:
+            return fn()
+        except AuthenticationError as exc:
+            logger.warning("Operation denied -- not authenticated.")
+            return {"success": False, "error": str(exc), **(default or {})}
+        except SDMSException as exc:
+            logger.error("Operation failed: %s", exc)
+            return {"success": False, "error": str(exc), **(default or {})}
+
+    def _log_share_failure(
+        self, document_id: str, recipient: str, message: str,
+    ) -> None:
+        """Log a failed share attempt to the audit trail."""
+        self._audit_service.log_event(
+            action=AuditAction.DOCUMENT_SHARE.value,
+            resource_type=ResourceType.SHARING.value,
+            resource_id=document_id,
+            resource_name=recipient,
+            status=OperationStatus.FAILURE.value,
+            message=f"Share failed: {message}",
+            severity=SeverityLevel.WARNING.value,
+        )
+
     # ------------------------------------------------------------------
     # Upload
     # ------------------------------------------------------------------
@@ -109,86 +136,34 @@ class DocumentController:
     def list_my_documents(
         self, page: int = 1, per_page: int = 20
     ) -> dict[str, Any]:
-        """List documents owned by the current user.
-
-        Args:
-            page:     Page number (1-indexed).
-            per_page: Items per page.
-
-        Returns:
-            A dict with the paginated result::
-
-                {
-                    "success": True,
-                    "documents": [...],
-                    "pagination": {
-                        "page": 1, "per_page": 20,
-                        "total": 5, "total_pages": 1,
-                        "has_next": False, "has_previous": False,
-                    },
-                }
-        """
-        try:
-            result = self._listing_service.list_my_documents(
+        """List documents owned by the current user."""
+        return self._safe_call(
+            lambda: {"success": True, **self._listing_service.list_my_documents(
                 page=page, per_page=per_page
-            )
-            return {"success": True, **result}
-        except AuthenticationError as exc:
-            logger.warning("List denied — not authenticated.")
-            return {"success": False, "error": str(exc), "documents": []}
-        except SDMSException as exc:
-            logger.error("List failed: %s", exc)
-            return {"success": False, "error": str(exc), "documents": []}
+            )},
+            default={"documents": []},
+        )
 
     def list_shared_with_me(
         self, page: int = 1, per_page: int = 20
     ) -> dict[str, Any]:
-        """List documents shared with the current user.
-
-        Prepared for the upcoming sharing milestone.
-        """
-        try:
-            result = self._listing_service.list_shared_with_me(
+        """List documents shared with the current user."""
+        return self._safe_call(
+            lambda: {"success": True, **self._listing_service.list_shared_with_me(
                 page=page, per_page=per_page
-            )
-            return {"success": True, **result}
-        except AuthenticationError as exc:
-            logger.warning("List shared denied — not authenticated.")
-            return {"success": False, "error": str(exc), "documents": []}
-        except SDMSException as exc:
-            logger.error("List shared failed: %s", exc)
-            return {"success": False, "error": str(exc), "documents": []}
+            )},
+            default={"documents": []},
+        )
 
     # ------------------------------------------------------------------
     # Detail
     # ------------------------------------------------------------------
 
     def get_document_detail(self, document_id: str) -> dict[str, Any]:
-        """View safe metadata for a single document.
-
-        Args:
-            document_id: The UUID4 hex document identifier.
-
-        Returns:
-            A dict with the result::
-
-                {
-                    "success": True,
-                    "document": { ... safe fields ... },
-                }
-        """
-        try:
-            result = self._listing_service.get_document_detail(document_id)
-            return {"success": True, "document": result}
-        except AuthenticationError as exc:
-            logger.warning("Detail denied — not authenticated.")
-            return {"success": False, "error": str(exc)}
-        except (ValidationError, DocumentNotFoundError) as exc:
-            logger.warning("Detail failed: %s", exc)
-            return {"success": False, "error": str(exc)}
-        except SDMSException as exc:
-            logger.error("Detail failed: %s", exc)
-            return {"success": False, "error": str(exc)}
+        """View safe metadata for a single document."""
+        return self._safe_call(
+            lambda: {"success": True, "document": self._listing_service.get_document_detail(document_id)},
+        )
 
     # ------------------------------------------------------------------
     # Search
@@ -201,53 +176,18 @@ class DocumentController:
         page: int = 1,
         per_page: int = 20,
     ) -> dict[str, Any]:
-        """Search and filter documents owned by the current user.
-
-        Args:
-            query:     Search term (filename text search).
-            mime_type: Optional MIME type filter.
-            page:      Page number (1-indexed).
-            per_page:  Items per page.
-
-        Returns:
-            A dict with the paginated search result::
-
-                {
-                    "success": True,
-                    "documents": [...],
-                    "pagination": {...},
-                    "search_query": "...",
-                    "mime_filter": "..." or None,
-                }
-        """
-        try:
-            result = self._listing_service.search_my_documents(
-                query=query, mime_type=mime_type, page=page, per_page=per_page
-            )
-            return {
+        """Search and filter documents owned by the current user."""
+        extra = {"search_query": query, "mime_filter": mime_type}
+        return self._safe_call(
+            lambda: {
                 "success": True,
-                **result,
-                "search_query": query,
-                "mime_filter": mime_type,
-            }
-        except AuthenticationError as exc:
-            logger.warning("Search denied — not authenticated.")
-            return {
-                "success": False,
-                "error": str(exc),
-                "documents": [],
-                "search_query": query,
-                "mime_filter": mime_type,
-            }
-        except SDMSException as exc:
-            logger.error("Search failed: %s", exc)
-            return {
-                "success": False,
-                "error": str(exc),
-                "documents": [],
-                "search_query": query,
-                "mime_filter": mime_type,
-            }
+                **self._listing_service.search_my_documents(
+                    query=query, mime_type=mime_type, page=page, per_page=per_page,
+                ),
+                **extra,
+            },
+            default={"documents": [], **extra},
+        )
 
     # ------------------------------------------------------------------
     # Download
@@ -395,27 +335,11 @@ class DocumentController:
             return {"success": False, "error": str(exc)}
         except ValidationError as exc:
             logger.warning("Share validation failed: %s", exc)
-            self._audit_service.log_event(
-                action=AuditAction.DOCUMENT_SHARE.value,
-                resource_type=ResourceType.SHARING.value,
-                resource_id=document_id,
-                resource_name=recipient_username,
-                status=OperationStatus.FAILURE.value,
-                message=f"Share validation failed: {exc}",
-                severity=SeverityLevel.WARNING.value,
-            )
+            self._log_share_failure(document_id, recipient_username, str(exc))
             return {"success": False, "error": str(exc)}
         except (DocumentNotFoundError, UserNotFoundError) as exc:
             logger.warning("Share failed: %s", exc)
-            self._audit_service.log_event(
-                action=AuditAction.DOCUMENT_SHARE.value,
-                resource_type=ResourceType.SHARING.value,
-                resource_id=document_id,
-                resource_name=recipient_username,
-                status=OperationStatus.FAILURE.value,
-                message=f"Share failed: {exc}",
-                severity=SeverityLevel.WARNING.value,
-            )
+            self._log_share_failure(document_id, recipient_username, str(exc))
             return {"success": False, "error": str(exc)}
         except SDMSException as exc:
             logger.error("Share failed: %s", exc)

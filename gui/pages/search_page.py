@@ -3,9 +3,8 @@
 from __future__ import annotations
 import customtkinter as ctk
 from gui.theme import ThemeManager, Dim, Fonts
-from gui.components.forms import StyledEntry, StyledComboBox, StyledButton
+from gui.components.forms import StyledEntry, StyledButton
 from gui.components.tables import StyledTable
-from gui.components.dialogs import Toast
 from gui.smooth_scrolling import bind_smooth_scroll
 
 tm = ThemeManager()
@@ -14,6 +13,7 @@ C = tm.C
 
 class SearchPage(ctk.CTkFrame):
     def __init__(self, master, **kw):
+        kw.pop("fg_color", None)
         super().__init__(master, fg_color=C.bg_main, **kw)
         self._all_docs = []
 
@@ -192,11 +192,17 @@ class SearchPage(ctk.CTkFrame):
 
     def _go_back(self):
         if hasattr(self, '_app') and self._app:
-            self._app._navigate("documents")
+            try:
+                self._app._navigate("documents")
+            except Exception:
+                pass
 
     def _go_dashboard(self):
         if hasattr(self, '_app') and self._app:
-            self._app._navigate("dashboard")
+            try:
+                self._app._navigate("dashboard")
+            except Exception:
+                pass
 
     def apply_theme(self):
         self.configure(fg_color=C.bg_main)

@@ -5,7 +5,7 @@ import customtkinter as ctk
 from gui.theme import ThemeManager, Dim, Fonts
 from gui.components.tables import StyledTable
 from gui.components.forms import StyledButton, StyledComboBox, StyledEntry
-from gui.components.dialogs import Toast
+from gui.components.dialogs import Toast, ConfirmDialog
 from gui.smooth_scrolling import bind_smooth_scroll
 
 tm = ThemeManager()
@@ -14,6 +14,7 @@ C = tm.C
 
 class SharedPage(ctk.CTkFrame):
     def __init__(self, master, **kw):
+        kw.pop("fg_color", None)
         super().__init__(master, fg_color=C.bg_main, **kw)
         self._shared = []
 
@@ -104,7 +105,11 @@ class SharedPage(ctk.CTkFrame):
         if not sel:
             Toast(self, "Select a share entry to revoke", "warning")
             return
-        Toast(self, f"Revoked access for {sel.get('original_filename', sel.get('filename', 'file'))}", "success")
+        ConfirmDialog(
+            self,
+            f"Revoke access for '{sel.get('original_filename', sel.get('filename', 'file'))}'?",
+            on_yes=lambda: Toast(self, "Access revoked", "success"),
+        )
 
     def apply_theme(self):
         self.configure(fg_color=C.bg_main)

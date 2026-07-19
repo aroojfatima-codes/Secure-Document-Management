@@ -14,6 +14,8 @@ class StatCard(ctk.CTkFrame):
 
     def __init__(self, master, title: str, value: str, icon: str = "",
                  accent: str = "", **kw):
+        kw.pop("fg_color", None)
+        kw.pop("corner_radius", None)
         super().__init__(master, fg_color=C.bg_card,
                          corner_radius=Dim.RADIUS_LG, **kw)
         if not accent:
@@ -56,6 +58,8 @@ class InfoCard(ctk.CTkFrame):
     """Card with a title header and scrollable content area."""
 
     def __init__(self, master, title: str = "", **kw):
+        kw.pop("fg_color", None)
+        kw.pop("corner_radius", None)
         super().__init__(master, fg_color=C.bg_card,
                          corner_radius=Dim.RADIUS_LG, **kw)
         if title:
@@ -91,9 +95,13 @@ class ActionCard(ctk.CTkFrame):
     """Clickable action card for dashboard quick actions."""
 
     def __init__(self, master, title: str, icon: str, description: str = "",
-                 accent: str = "", command: Callable | None = None, **kw):
+                 accent: str = "", command: Callable | None = None,
+                 height: int = 90, **kw):
+        kw.pop("height", None)
+        kw.pop("fg_color", None)
+        kw.pop("corner_radius", None)
         super().__init__(master, fg_color=C.bg_card,
-                         corner_radius=Dim.RADIUS_LG, height=90,
+                         corner_radius=Dim.RADIUS_LG, height=height,
                          cursor="hand2", **kw)
         self.pack_propagate(False)
         self._cmd = command
@@ -142,8 +150,11 @@ class PageHeader(ctk.CTkFrame):
     """Page title with optional subtitle and action buttons."""
 
     def __init__(self, master, title: str, subtitle: str = "",
-                 actions: list[tuple[str, Callable]] | None = None, **kw):
-        super().__init__(master, fg_color="transparent", height=52, **kw)
+                 actions: list[tuple[str, Callable]] | None = None,
+                 height: int = 52, **kw):
+        kw.pop("height", None)
+        kw.pop("fg_color", None)
+        super().__init__(master, fg_color="transparent", height=height, **kw)
         self.pack_propagate(False)
 
         left = ctk.CTkFrame(self, fg_color="transparent")

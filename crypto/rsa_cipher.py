@@ -17,7 +17,6 @@ from crypto.exceptions import KeySerializationError, RSAError
 from crypto.interfaces import BaseCipher
 
 RSA_KEY_SIZE: int = 2048
-ALGORITHM_NAME: str = "RSA-2048-OAEP-SHA-256"
 
 
 class RSACipher(BaseCipher[bytes]):
@@ -110,10 +109,6 @@ class RSACipher(BaseCipher[bytes]):
     def load_private_key(self, pem_data: bytes, password: str | None = None) -> None:
         """Load a private key from PEM-encoded bytes.
 
-        Args:
-            pem_data:  PEM-encoded private key bytes.
-            password:  Passphrase if the key is encrypted.
-
         Raises:
             KeySerializationError: If the PEM data is invalid or the
                 password is incorrect.
@@ -128,9 +123,6 @@ class RSACipher(BaseCipher[bytes]):
     def load_public_key(self, pem_data: bytes) -> None:
         """Load a public key from PEM-encoded bytes.
 
-        Args:
-            pem_data: PEM-encoded public key bytes.
-
         Raises:
             KeySerializationError: If the PEM data is invalid.
         """
@@ -141,35 +133,27 @@ class RSACipher(BaseCipher[bytes]):
                 f"Failed to load public key: {exc}"
             ) from exc
 
-    def load_private_key_from_file(
-        self, file_path: str | Path, password: str | None = None
-    ) -> None:
-        """Load a private key from a PEM file on disk.
-
-        Args:
-            file_path: Path to the PEM file.
-            password:  Passphrase if the key is encrypted.
-        """
+    def _load_key_from_file(
+        self, file_path: str | Path, purpose: str,
+    ) -> bytes:
+        """Read a PEM file from disk, raising on missing file."""
         path = Path(file_path).resolve()
         if not path.is_file():
             raise KeySerializationError(
-                f"Private key file not found: {path}"
+                f"{purpose} key file not found: {path}"
             )
-        pem_data: bytes = path.read_bytes()
+        return path.read_bytes()
+
+    def load_private_key_from_file(
+        self, file_path: str | Path, password: str | None = None,
+    ) -> None:
+        """Load a private key from a PEM file on disk."""
+        pem_data = self._load_key_from_file(file_path, "Private")
         self.load_private_key(pem_data, password=password)
 
     def load_public_key_from_file(self, file_path: str | Path) -> None:
-        """Load a public key from a PEM file on disk.
-
-        Args:
-            file_path: Path to the PEM file.
-        """
-        path = Path(file_path).resolve()
-        if not path.is_file():
-            raise KeySerializationError(
-                f"Public key file not found: {path}"
-            )
-        pem_data: bytes = path.read_bytes()
+        """Load a public key from a PEM file on disk."""
+        pem_data = self._load_key_from_file(file_path, "Public")
         self.load_public_key(pem_data)
 
     # ------------------------------------------------------------------

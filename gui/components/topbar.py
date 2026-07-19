@@ -12,20 +12,16 @@ C = tm.C
 class TopBar(ctk.CTkFrame):
     """Horizontal top bar spanning the content area."""
 
-    def __init__(self, master, **kw):
-        super().__init__(master, height=Dim.TOPBAR_H, fg_color=C.bg_topbar,
+    def __init__(self, master, height: int = Dim.TOPBAR_H, **kw):
+        kw.pop("height", None)
+        kw.pop("fg_color", None)
+        kw.pop("corner_radius", None)
+        super().__init__(master, height=height, fg_color=C.bg_topbar,
                          corner_radius=0, **kw)
         self.pack_propagate(False)
 
         self._left = ctk.CTkFrame(self, fg_color="transparent")
         self._left.pack(side="left", fill="y", padx=(Dim.PAD_LG, 0))
-
-        self._toggle_btn = ctk.CTkButton(
-            self._left, text="\u2630", font=Fonts.ICON, width=32, height=32,
-            fg_color="transparent", hover_color=C.bg_sidebar_hover,
-            text_color=C.text_secondary, command=self._on_toggle,
-        )
-        self._toggle_btn.pack(side="left", padx=(0, 8))
 
         self._breadcrumb = ctk.CTkLabel(
             self._left, text="", font=Fonts.BODY_BOLD,
@@ -41,7 +37,8 @@ class TopBar(ctk.CTkFrame):
             self._right, textvariable=self._search_var,
             placeholder_text="Quick search...",
             font=Fonts.BODY, fg_color=C.bg_input, border_color=C.border,
-            text_color=C.text_primary, corner_radius=Dim.RADIUS,
+            text_color=C.text_primary, placeholder_text_color=C.text_dim,
+            corner_radius=Dim.RADIUS,
             width=200, height=30,
         )
         self._search_entry.pack(side="left", padx=(0, 12), pady=9)
@@ -76,7 +73,6 @@ class TopBar(ctk.CTkFrame):
             height=30, width=90, command=self._on_logout_click,
         )
 
-        self._on_toggle_cb: Callable | None = None
         self._on_theme_change_cb: Callable | None = None
         self._on_logout_cb: Callable | None = None
         self._logged_in = False
@@ -90,9 +86,6 @@ class TopBar(ctk.CTkFrame):
             display = f"{username}  ({role})"
         self._user_label.configure(text=display)
 
-    def set_toggle_callback(self, cb: Callable):
-        self._on_toggle_cb = cb
-
     def set_theme_change_callback(self, cb: Callable):
         self._on_theme_change_cb = cb
 
@@ -100,32 +93,34 @@ class TopBar(ctk.CTkFrame):
         self._on_logout_cb = cb
 
     def set_logged_in(self, logged_in: bool):
-        """Show or hide the logout button in the topbar."""
         self._logged_in = logged_in
         if logged_in:
             self._logout_btn.pack(side="left", padx=(12, 0))
         else:
             self._logout_btn.pack_forget()
 
-    def _on_toggle(self):
-        if self._on_toggle_cb:
-            self._on_toggle_cb()
-
     def _toggle_theme(self):
-        new_mode = tm.toggle()
-        self._theme_btn.configure(text="\u2600" if new_mode == "dark" else "\u263E")
-        if self._on_theme_change_cb:
-            self._on_theme_change_cb(new_mode)
+        try:
+            new_mode = tm.toggle()
+            self._theme_btn.configure(text="\u2600" if new_mode == "dark" else "\u263E")
+            if self._on_theme_change_cb:
+                self._on_theme_change_cb(new_mode)
+        except Exception:
+            pass
 
     def _on_logout_click(self):
         if self._on_logout_cb:
-            self._on_logout_cb()
+            try:
+                self._on_logout_cb()
+            except Exception:
+                pass
 
     def apply_theme(self):
         self.configure(fg_color=C.bg_topbar)
         self._breadcrumb.configure(text_color=C.text_primary)
         self._search_entry.configure(
-            fg_color=C.bg_input, border_color=C.border, text_color=C.text_primary)
+            fg_color=C.bg_input, border_color=C.border, text_color=C.text_primary,
+            placeholder_text_color=C.text_dim)
         self._theme_btn.configure(
             fg_color="transparent", hover_color=C.bg_sidebar_hover,
             text_color=C.text_secondary)

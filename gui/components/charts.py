@@ -12,6 +12,8 @@ class DonutChart(ctk.CTkFrame):
     """Simple donut/pie chart drawn on a Canvas."""
 
     def __init__(self, master, size: int = 160, **kw):
+        kw.pop("fg_color", None)
+        kw.pop("corner_radius", None)
         super().__init__(master, fg_color=C.bg_card,
                          corner_radius=Dim.RADIUS_LG, **kw)
         self._size = size
@@ -83,6 +85,8 @@ class BarChart(ctk.CTkFrame):
     """Simple horizontal bar chart."""
 
     def __init__(self, master, width: int = 280, bar_height: int = 20, **kw):
+        kw.pop("fg_color", None)
+        kw.pop("corner_radius", None)
         super().__init__(master, fg_color=C.bg_card,
                          corner_radius=Dim.RADIUS_LG, **kw)
         self._chart_width = width
@@ -125,6 +129,8 @@ class MiniSparkline(ctk.CTkFrame):
     """Tiny sparkline chart for stat cards."""
 
     def __init__(self, master, width: int = 80, height: int = 28, **kw):
+        kw.pop("fg_color", None)
+        kw.pop("height", None)
         super().__init__(master, fg_color="transparent", **kw)
         self._w = width
         self._h = height

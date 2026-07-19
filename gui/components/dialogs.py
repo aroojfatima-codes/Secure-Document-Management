@@ -3,7 +3,7 @@
 from __future__ import annotations
 from typing import Callable
 import customtkinter as ctk
-from gui.theme import ThemeManager, Dim, Fonts
+from gui.theme import ThemeManager, Fonts
 
 tm = ThemeManager()
 C = tm.C
@@ -19,8 +19,11 @@ class BaseDialog(ctk.CTkToplevel):
         self.title(title)
         self.configure(fg_color=C.bg_modal)
         self.resizable(False, False)
-        self.transient(master)
-        self.grab_set()
+        try:
+            self.transient(master)
+            self.grab_set()
+        except Exception:
+            pass
         self._on_close = on_close
 
         w, h = 420, 240
@@ -52,9 +55,15 @@ class BaseDialog(ctk.CTkToplevel):
         self.protocol("WM_DELETE_WINDOW", self._close)
 
     def _close(self):
+        try:
+            self.grab_release()
+        except Exception:
+            pass
         if self._on_close:
-            self._on_close()
-        self.grab_release()
+            try:
+                self._on_close()
+            except Exception:
+                pass
         self.destroy()
 
 
@@ -83,8 +92,11 @@ class ConfirmDialog(ctk.CTkToplevel):
         self.title(title)
         self.configure(fg_color=C.bg_modal)
         self.resizable(False, False)
-        self.transient(master)
-        self.grab_set()
+        try:
+            self.transient(master)
+            self.grab_set()
+        except Exception:
+            pass
         self._on_yes = on_yes
         self._on_no = on_no
 
@@ -111,16 +123,28 @@ class ConfirmDialog(ctk.CTkToplevel):
         self.protocol("WM_DELETE_WINDOW", self._no)
 
     def _yes(self):
-        self.grab_release()
+        try:
+            self.grab_release()
+        except Exception:
+            pass
         self.destroy()
         if self._on_yes:
-            self._on_yes()
+            try:
+                self._on_yes()
+            except Exception:
+                pass
 
     def _no(self):
-        self.grab_release()
+        try:
+            self.grab_release()
+        except Exception:
+            pass
         self.destroy()
         if self._on_no:
-            self._on_no()
+            try:
+                self._on_no()
+            except Exception:
+                pass
 
 
 class Toast(ctk.CTkToplevel):
@@ -128,56 +152,65 @@ class Toast(ctk.CTkToplevel):
 
     def __init__(self, master, message: str, toast_type: str = "success",
                  duration: int = 3000):
-        super().__init__(master)
-        self.overrideredirect(True)
-        self.configure(fg_color=C.bg_card, border_width=1,
-                       border_color=C.border_light)
+        try:
+            super().__init__(master)
+            self.overrideredirect(True)
+            self.configure(fg_color=C.bg_card, border_width=1,
+                           border_color=C.border_light)
 
-        color_map = {
-            "success": (C.success, "\u2714"),
-            "error": (C.danger, "\u2718"),
-            "warning": (C.warning, "\u26A0"),
-            "info": (C.info, "\u2139"),
-        }
-        accent, icon_t = color_map.get(toast_type, color_map["info"])
+            color_map = {
+                "success": (C.success, "\u2714"),
+                "error": (C.danger, "\u2718"),
+                "warning": (C.warning, "\u26A0"),
+                "info": (C.info, "\u2139"),
+            }
+            accent, icon_t = color_map.get(toast_type, color_map["info"])
 
-        ctk.CTkFrame(self, width=4, fg_color=accent, corner_radius=0).pack(
-            side="left", fill="y")
-        ctk.CTkLabel(self, text=icon_t, font=Fonts.ICON,
-                     text_color=accent, width=30).pack(side="left", padx=(6, 2))
-        ctk.CTkLabel(
-            self, text=message, font=Fonts.BODY,
-            text_color=C.text_primary, wraplength=280,
-        ).pack(side="left", padx=(0, 14), pady=10)
+            ctk.CTkFrame(self, width=4, fg_color=accent, corner_radius=0).pack(
+                side="left", fill="y")
+            ctk.CTkLabel(self, text=icon_t, font=Fonts.ICON,
+                         text_color=accent, width=30).pack(side="left", padx=(6, 2))
+            ctk.CTkLabel(
+                self, text=message, font=Fonts.BODY,
+                text_color=C.text_primary, wraplength=280,
+            ).pack(side="left", padx=(0, 14), pady=10)
 
-        self.update_idletasks()
-        sw = self.winfo_screenwidth()
-        w = self.winfo_width()
-        start_x = sw + 10
-        end_x = sw - w - 20
-        y = 20
-        self.geometry(f"+{start_x}+{y}")
-        self._slide_in(start_x, end_x, y, 0, 8)
-        self.after(duration, lambda: self._slide_out(end_x, start_x, y))
+            self.update_idletasks()
+            sw = self.winfo_screenwidth()
+            w = self.winfo_width()
+            start_x = sw + 10
+            end_x = sw - w - 20
+            y = 20
+            self.geometry(f"+{start_x}+{y}")
+            self._slide_in(start_x, end_x, y, 0, 8)
+            self.after(duration, lambda: self._slide_out(end_x, start_x, y))
+        except Exception:
+            pass
 
     def _slide_in(self, start_x, end_x, y, step, total):
         def run():
-            p = min((step + 1) / total, 1.0)
-            eased = 1 - (1 - p) ** 3
-            x = int(start_x + (end_x - start_x) * eased)
-            self.geometry(f"+{x}+{y}")
-            if step + 1 < total:
-                self.after(18, lambda: self._slide_in(start_x, end_x, y, step + 1, total))
+            try:
+                p = min((step + 1) / total, 1.0)
+                eased = 1 - (1 - p) ** 3
+                x = int(start_x + (end_x - start_x) * eased)
+                self.geometry(f"+{x}+{y}")
+                if step + 1 < total:
+                    self.after(18, lambda: self._slide_in(start_x, end_x, y, step + 1, total))
+            except Exception:
+                pass
         self.after(18, run)
 
     def _slide_out(self, start_x, end_x, y, step=0, total=8):
         def run():
-            p = min((step + 1) / total, 1.0)
-            eased = p ** 3
-            x = int(start_x + (end_x - start_x) * eased)
-            self.geometry(f"+{x}+{y}")
-            if step + 1 < total:
-                self.after(18, lambda: self._slide_out(start_x, end_x, y, step + 1, total))
-            else:
-                self.destroy()
+            try:
+                p = min((step + 1) / total, 1.0)
+                eased = p ** 3
+                x = int(start_x + (end_x - start_x) * eased)
+                self.geometry(f"+{x}+{y}")
+                if step + 1 < total:
+                    self.after(18, lambda: self._slide_out(start_x, end_x, y, step + 1, total))
+                else:
+                    self.destroy()
+            except Exception:
+                pass
         self.after(18, run)

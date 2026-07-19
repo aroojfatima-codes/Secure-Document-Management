@@ -121,56 +121,23 @@ class DocumentListingService:
     ) -> dict[str, Any]:
         """Paginated list of documents owned by the current user.
 
-        Args:
-            page:     Page number (1-indexed).
-            per_page: Items per page (capped at :const:`MAX_PER_PAGE`).
-
         Returns:
-            ``{"success": True, "documents": [...], "pagination": {...}}``
+            ``{"documents": [...], "pagination": {...}}``
         """
         session = self._session_mgr.get_current_session()
-        page, per_page = self._validate_pagination(page, per_page)
-        skip: int = (page - 1) * per_page
-
-        total: int = self._doc_repo.count(
-            {"owner_id": session.user_id, "is_deleted": False}
-        )
-        docs: list[dict[str, Any]] = self._doc_repo.find(
-            filters={"owner_id": session.user_id, "is_deleted": False},
-            skip=skip,
-            limit=per_page,
-            sort=[("created_at", -1)],
-        )
-
-        return {
-            "documents": [_safe_document_info(d) for d in docs],
-            "pagination": _build_pagination_meta(total, page, per_page),
-        }
+        filters = {"owner_id": session.user_id, "is_deleted": False}
+        return self._paginated_list(filters, page, per_page)
 
     def list_shared_with_me(
         self, page: int = 1, per_page: int = DEFAULT_PER_PAGE
     ) -> dict[str, Any]:
         """Paginated list of documents shared with the current user."""
         session = self._session_mgr.get_current_session()
-        page, per_page = self._validate_pagination(page, per_page)
-        skip: int = (page - 1) * per_page
-
-        filters: dict[str, Any] = {
+        filters = {
             "shared_with.user_id": session.user_id,
             "is_deleted": False,
         }
-        total: int = self._doc_repo.count(filters)
-        docs: list[dict[str, Any]] = self._doc_repo.find(
-            filters=filters,
-            skip=skip,
-            limit=per_page,
-            sort=[("created_at", -1)],
-        )
-
-        return {
-            "documents": [_safe_document_info(d) for d in docs],
-            "pagination": _build_pagination_meta(total, page, per_page),
-        }
+        return self._paginated_list(filters, page, per_page)
 
     def get_document_detail(self, document_id: str) -> dict[str, Any]:
         """Return safe metadata for a single document.
@@ -230,12 +197,9 @@ class DocumentListingService:
             per_page:  Items per page.
 
         Returns:
-            ``{"success": True, "documents": [...], "pagination": {...}}``
+            ``{"documents": [...], "pagination": {...}}``
         """
         session = self._session_mgr.get_current_session()
-        page, per_page = self._validate_pagination(page, per_page)
-        skip: int = (page - 1) * per_page
-
         filters: dict[str, Any] = {
             "owner_id": session.user_id,
             "is_deleted": False,
@@ -244,6 +208,22 @@ class DocumentListingService:
             filters["$text"] = {"$search": query.strip()}
         if mime_type:
             filters["mime_type"] = mime_type
+
+        return self._paginated_list(filters, page, per_page)
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _paginated_list(
+        self,
+        filters: dict[str, Any],
+        page: int = 1,
+        per_page: int = DEFAULT_PER_PAGE,
+    ) -> dict[str, Any]:
+        """Run a paginated query and return formatted results."""
+        page, per_page = self._validate_pagination(page, per_page)
+        skip: int = (page - 1) * per_page
 
         total: int = self._doc_repo.count(filters)
         docs: list[dict[str, Any]] = self._doc_repo.find(
@@ -257,10 +237,6 @@ class DocumentListingService:
             "documents": [_safe_document_info(d) for d in docs],
             "pagination": _build_pagination_meta(total, page, per_page),
         }
-
-    # ------------------------------------------------------------------
-    # Validation helpers
-    # ------------------------------------------------------------------
 
     @staticmethod
     def _validate_pagination(

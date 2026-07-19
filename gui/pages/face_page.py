@@ -14,6 +14,7 @@ C = tm.C
 
 class FacePage(ctk.CTkFrame):
     def __init__(self, master, on_enroll=None, on_verify=None, **kw):
+        kw.pop("fg_color", None)
         super().__init__(master, fg_color=C.bg_main, **kw)
         self._on_enroll = on_enroll
         self._on_verify = on_verify
@@ -46,7 +47,7 @@ class FacePage(ctk.CTkFrame):
         scroll.grid_columnconfigure(1, weight=1)
 
         content = ctk.CTkFrame(scroll, fg_color="transparent")
-        content.grid(row=0, column=0, sticky="nsew")
+        content.grid(row=0, column=0, columnspan=2, sticky="nsew")
         content.grid_columnconfigure(0, weight=1)
         content.grid_columnconfigure(1, weight=1)
 
@@ -193,11 +194,17 @@ class FacePage(ctk.CTkFrame):
         self.after(2000, lambda: self._finish_enroll(u))
 
     def _finish_enroll(self, username):
-        self._enroll_spinner.stop()
-        self._enroll_spinner.pack_forget()
+        try:
+            self._enroll_spinner.stop()
+            self._enroll_spinner.pack_forget()
+        except Exception:
+            pass
         result = None
         if self._on_enroll:
-            result = self._on_enroll(username)
+            try:
+                result = self._on_enroll(username)
+            except Exception:
+                result = {"success": False, "error": "Enrollment failed"}
         if result and result.get("success"):
             self._enroll_status.configure(
                 text=f"Successfully enrolled '{username}'",
@@ -225,11 +232,17 @@ class FacePage(ctk.CTkFrame):
         self.after(2000, self._finish_verify)
 
     def _finish_verify(self):
-        self._verify_spinner.stop()
-        self._verify_spinner.pack_forget()
+        try:
+            self._verify_spinner.stop()
+            self._verify_spinner.pack_forget()
+        except Exception:
+            pass
         result = None
         if self._on_verify:
-            result = self._on_verify()
+            try:
+                result = self._on_verify()
+            except Exception:
+                result = {"success": False, "error": "Verification failed"}
         if result and result.get("success"):
             self._verify_status.configure(text="", text_color=C.text_secondary)
             self._result_label.configure(text="\u2714 Identity Verified", text_color=C.success)

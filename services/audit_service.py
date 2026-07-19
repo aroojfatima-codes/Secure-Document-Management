@@ -17,6 +17,15 @@ logger = get_logger(__name__)
 
 
 class AuditService:
+    """Provides audit event logging and log querying.
+
+    Usage::
+
+        svc = AuditService()
+        svc.log_event("USER_LOGIN", "SESSION", status="SUCCESS")
+        results = svc.query_logs(action="USER_LOGIN", page=1)
+    """
+
     def __init__(self) -> None:
         self._audit_repo: AuditRepository = AuditRepository()
         self._session_mgr: SessionManager = SessionManager()
@@ -32,27 +41,11 @@ class AuditService:
         severity: str = SeverityLevel.INFO.value,
         metadata: dict[str, Any] | None = None,
     ) -> bool:
+        """Persist an audit log entry. Returns True on success."""
         try:
             audit_id: str = generate_crypto_id()
             now: datetime = datetime.now(timezone.utc)
-            session_id: str = ""
-            user_id: str = ""
-            username: str = ""
-            role: str = ""
-            client_ip: str = ""
-            device_info: str = ""
-
-            try:
-                if self._session_mgr.is_authenticated:
-                    session = self._session_mgr.get_current_session()
-                    user_id = session.user_id
-                    username = session.username
-                    role = session.role
-                    session_id = getattr(session, "session_id", "")
-                    if not session_id:
-                        session_id = audit_id
-            except Exception:
-                logger.debug("Could not enrich audit event with session data.", exc_info=True)
+            user_id, username, role, session_id = self._get_session_context()
 
             audit_log = AuditLog(
                 audit_id=audit_id,
@@ -67,9 +60,9 @@ class AuditService:
                 status=status,
                 message=message,
                 severity=severity,
-                session_id=session_id,
-                client_ip=client_ip,
-                device_info=device_info,
+                session_id=session_id or audit_id,
+                client_ip="",
+                device_info="",
                 metadata=metadata or {},
                 created_at=now,
             )
@@ -78,20 +71,14 @@ class AuditService:
             logger.debug(
                 "Audit log created: action=%s, resource_type=%s, "
                 "resource_id=%s, status=%s, severity=%s",
-                action,
-                resource_type,
-                resource_id,
-                status,
-                severity,
+                action, resource_type, resource_id, status, severity,
             )
             return True
 
         except Exception as exc:
             logger.exception(
                 "Failed to write audit log (action=%s, resource_type=%s): %s",
-                action,
-                resource_type,
-                exc,
+                action, resource_type, exc,
             )
             return False
 
@@ -109,29 +96,21 @@ class AuditService:
         page: int = 1,
         per_page: int = 50,
     ) -> dict[str, Any]:
+        """Query audit logs with filtering and pagination."""
         try:
             skip: int = (page - 1) * per_page
             logs = self._audit_repo.find_logs(
-                username=username,
-                action=action,
-                severity=severity,
-                resource_type=resource_type,
-                status=status,
-                date_from=date_from,
-                date_to=date_to,
-                user_id=user_id,
-                resource_id=resource_id,
-                skip=skip,
-                limit=per_page,
+                username=username, action=action, severity=severity,
+                resource_type=resource_type, status=status,
+                date_from=date_from, date_to=date_to,
+                user_id=user_id, resource_id=resource_id,
+                skip=skip, limit=per_page,
             )
             total: int = self._audit_repo.count_logs(
-                username=username,
-                action=action,
-                severity=severity,
-                resource_type=resource_type,
-                status=status,
-                date_from=date_from,
-                date_to=date_to,
+                username=username, action=action, severity=severity,
+                resource_type=resource_type, status=status,
+                date_from=date_from, date_to=date_to,
+                user_id=user_id, resource_id=resource_id,
             )
             total_pages: int = max(1, (total + per_page - 1) // per_page)
 
@@ -158,3 +137,18 @@ class AuditService:
                 "has_next": False,
                 "has_previous": False,
             }
+
+    def _get_session_context(self) -> tuple[str, str, str, str]:
+        """Extract user context from the current session."""
+        try:
+            if self._session_mgr.is_authenticated:
+                session = self._session_mgr.get_current_session()
+                return (
+                    session.user_id,
+                    session.username,
+                    session.role,
+                    getattr(session, "session_id", ""),
+                )
+        except Exception:
+            logger.debug("Could not enrich audit event with session data.", exc_info=True)
+        return "", "", "", ""

@@ -7,7 +7,7 @@ logout; document management will be added in later milestones.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
 
 from controllers.auth_controller import AuthController
 from controllers.audit_controller import AuditController
@@ -42,6 +42,106 @@ def _info(msg: str) -> str:
 
 def _bold(msg: str) -> str:
     return f"{_C.BOLD}{msg}{_C.RESET}"
+
+
+def _show_result(
+    result: dict[str, Any],
+    on_success: Callable[[dict[str, Any]], None] | None = None,
+) -> None:
+    """Display a success or error banner from an operation result dict."""
+    print()
+    if result.get("success"):
+        print(f"  {_ok(result['message'])}")
+        if on_success:
+            on_success(result)
+    else:
+        print(f"  {_err(result['error'])}")
+
+
+def _paginate_documents(
+    title: str,
+    empty_msg: str,
+    fetch_fn: Callable[[int], dict[str, Any]],
+) -> None:
+    """Display a paginated document list with next/quit navigation."""
+    print()
+    print(f"  {_bold(f'--- {title} ---')}")
+    print()
+
+    page: int = 1
+    while True:
+        result = fetch_fn(page)
+
+        if not result.get("success"):
+            print(f"  {_err(result['error'])}")
+            return
+
+        documents = result.get("documents", [])
+        pagination = result.get("pagination", {})
+
+        if not documents:
+            if page == 1:
+                print(f"  {_info(empty_msg)}")
+            else:
+                print(f"  {_info('No more documents.')}")
+            return
+
+        total = pagination.get("total", 0)
+        print(
+            f"  {_bold(f'Page {pagination['page']}/{pagination['total_pages']}')}"
+            f"  ({total} document{'s' if total != 1 else ''})"
+        )
+        print()
+
+        for i, doc in enumerate(documents, start=1):
+            _print_document_summary(doc, index=i)
+
+        print()
+        if pagination.get("has_next"):
+            choice: str = input(
+                f"  {_info('[N]ext page, [Q]uit to menu: ')}"
+            ).strip().lower()
+            if choice == "n":
+                page += 1
+                continue
+        break
+
+
+def _format_audit_log_row(log: dict[str, Any]) -> str:
+    """Format a single audit log entry as a fixed-width table row."""
+    ts: str = log.get("timestamp", "")
+    if hasattr(ts, "strftime"):
+        ts = ts.strftime("%Y-%m-%d %H:%M")
+    else:
+        ts = str(ts)[:16]
+    username: str = log.get("username", "-")[:12]
+    action: str = log.get("action", "")[:22]
+    severity: str = log.get("severity", "")[:10]
+    status: str = log.get("status", "")[:10]
+    resource: str = log.get("resource_name", log.get("resource_id", ""))[:30]
+    return (
+        f"  {ts:<20} {username:<12} {action:<22} "
+        f"{severity:<10} {status:<10} {resource}"
+    )
+
+
+def _print_audit_table_header() -> None:
+    """Print the column header for the audit log table."""
+    print(
+        f"  {_C.DIM}{'TIMESTAMP':<20} {'USER':<12} {'ACTION':<22} "
+        f"{'SEVERITY':<10} {'STATUS':<10} RESOURCE{_C.RESET}"
+    )
+    print(f"  {_C.DIM}{'-'*80}{_C.RESET}")
+
+
+def _print_audit_search_entry(log: dict[str, Any]) -> None:
+    """Print a single audit log entry in the compact search format."""
+    print(f"  {_C.DIM}[{log.get('timestamp', '')}]{_C.RESET} "
+          f"{log.get('username', '-')} | "
+          f"{log.get('action', '')} | "
+          f"{log.get('severity', '')} | "
+          f"{log.get('status', '')} | "
+          f"{log.get('message', '')}")
 
 
 WELCOME_ART = rf"""
@@ -88,36 +188,39 @@ def run_cli() -> None:
             print(f"  {_ok('Goodbye.')}")
             logger.info("CLI session ended by user.")
             break
-        elif choice == "1":
-            _handle_registration(controller, face_controller)
-        elif choice == "2":
-            _handle_login(controller)
-        elif choice == "3" and controller.is_authenticated():
-            _handle_logout(controller)
-        elif choice == "3" and not controller.is_authenticated():
+
+        if choice == "3" and not controller.is_authenticated():
             _handle_face_login(face_controller)
-        elif choice == "4" and controller.is_authenticated():
-            _handle_upload(doc_controller)
-        elif choice == "5" and controller.is_authenticated():
-            _handle_list_documents(doc_controller)
-        elif choice == "6" and controller.is_authenticated():
-            _handle_document_detail(doc_controller)
-        elif choice == "7" and controller.is_authenticated():
-            _handle_search_documents(doc_controller)
-        elif choice == "8" and controller.is_authenticated():
-            _handle_download(doc_controller)
-        elif choice == "9" and controller.is_authenticated():
-            _handle_share(doc_controller)
-        elif choice == "10" and controller.is_authenticated():
-            _handle_shared_documents(doc_controller)
-        elif choice == "11" and controller.is_authenticated() and _is_admin(controller):
-            _handle_audit_logs(audit_controller)
-        elif choice == "12" and controller.is_authenticated() and _is_admin(controller):
-            _handle_audit_search(audit_controller)
-        elif choice == "13" and controller.is_authenticated():
-            _handle_face_settings(face_controller, controller)
-        else:
+            continue
+
+        dispatch: dict[str, tuple[bool, bool, Callable[[], None]]] = {
+            "1":  (False, False, lambda: _handle_registration(controller, face_controller)),
+            "2":  (False, False, lambda: _handle_login(controller)),
+            "3":  (True,  False, lambda: _handle_logout(controller)),
+            "4":  (True,  False, lambda: _handle_upload(doc_controller)),
+            "5":  (True,  False, lambda: _handle_list_documents(doc_controller)),
+            "6":  (True,  False, lambda: _handle_document_detail(doc_controller)),
+            "7":  (True,  False, lambda: _handle_search_documents(doc_controller)),
+            "8":  (True,  False, lambda: _handle_download(doc_controller)),
+            "9":  (True,  False, lambda: _handle_share(doc_controller)),
+            "10": (True,  False, lambda: _handle_shared_documents(doc_controller)),
+            "11": (True,  True,  lambda: _handle_audit_logs(audit_controller)),
+            "12": (True,  True,  lambda: _handle_audit_search(audit_controller)),
+            "13": (True,  False, lambda: _handle_face_settings(face_controller, controller)),
+        }
+
+        entry = dispatch.get(choice)
+        if entry is None:
             print("  Invalid choice. Please try again.")
+            continue
+
+        needs_auth, needs_admin, handler = entry
+        if needs_auth and not controller.is_authenticated():
+            print("  Invalid choice. Please try again.")
+        elif needs_admin and not _is_admin(controller):
+            print("  Invalid choice. Please try again.")
+        else:
+            handler()
 
 
 def _print_menu(controller: AuthController) -> None:
@@ -243,11 +346,7 @@ def _handle_login(controller: AuthController) -> None:
         username=username, password=password
     )
 
-    print()
-    if result.get("success"):
-        print(f"  {_ok(result['message'])}")
-    else:
-        print(f"  {_err(result['error'])}")
+    _show_result(result)
 
 
 def _handle_face_login(face_controller: FaceController) -> None:
@@ -264,11 +363,7 @@ def _handle_face_login(face_controller: FaceController) -> None:
     print(f"  {_info('Looking at camera...')}")
     result: dict[str, Any] = face_controller.login_face()
 
-    print()
-    if result.get("success"):
-        print(f"  {_ok(result['message'])}")
-    else:
-        print(f"  {_err(result['error'])}")
+    _show_result(result)
 
 
 def _handle_face_enrollment(
@@ -293,11 +388,7 @@ def _handle_face_enrollment(
 
     result: dict[str, Any] = face_controller.enroll(user_id, username)
 
-    print()
-    if result.get("success"):
-        print(f"  {_ok(result['message'])}")
-    else:
-        print(f"  {_err(result['error'])}")
+    _show_result(result)
 
 
 def _handle_face_settings(
@@ -340,11 +431,7 @@ def _handle_face_settings(
             ).strip().lower()
             if confirm == "y":
                 result = face_controller.remove_enrollment(user_id, username)
-                print()
-                if result.get("success"):
-                    print(f"  {_ok(result['message'])}")
-                else:
-                    print(f"  {_err(result['error'])}")
+                _show_result(result)
             else:
                 print(f"  {_info('Removal cancelled.')}")
     else:
@@ -362,11 +449,7 @@ def _handle_face_settings(
 def _handle_logout(controller: AuthController) -> None:
     """Log the current user out."""
     result: dict[str, Any] = controller.logout()
-    print()
-    if result.get("success"):
-        print(f"  {_ok(result['message'])}")
-    else:
-        print(f"  {_err(result['error'])}")
+    _show_result(result)
 
 
 def _print_document_summary(doc: dict[str, Any], index: int | None = None) -> None:
@@ -385,47 +468,11 @@ def _print_document_summary(doc: dict[str, Any], index: int | None = None) -> No
 
 def _handle_list_documents(doc_controller: DocumentController) -> None:
     """List all documents owned by the current user."""
-    print()
-    print(f"  {_bold('--- My Documents ---')}")
-    print()
-
-    page: int = 1
-    while True:
-        result = doc_controller.list_my_documents(page=page)
-
-        if not result.get("success"):
-            print(f"  {_err(result['error'])}")
-            return
-
-        documents = result.get("documents", [])
-        pagination = result.get("pagination", {})
-
-        if not documents:
-            if page == 1:
-                print(f"  {_info('No documents found. Upload your first document using [4].')}")
-            else:
-                print(f"  {_info('No more documents.')}")
-            return
-
-        total = pagination.get("total", 0)
-        print(
-            f"  {_bold(f'Page {pagination['page']}/{pagination['total_pages']}')}"
-            f"  ({total} document{'s' if total != 1 else ''})"
-        )
-        print()
-
-        for i, doc in enumerate(documents, start=1):
-            _print_document_summary(doc, index=i)
-
-        print()
-        if pagination.get("has_next"):
-            choice: str = input(
-                f"  {_info('[N]ext page, [Q]uit to menu: ')}"
-            ).strip().lower()
-            if choice == "n":
-                page += 1
-                continue
-        break
+    _paginate_documents(
+        title="My Documents",
+        empty_msg="No documents found. Upload your first document using [4].",
+        fetch_fn=lambda p: doc_controller.list_my_documents(page=p),
+    )
 
 
 def _handle_document_detail(doc_controller: DocumentController) -> None:
@@ -524,16 +571,14 @@ def _handle_download(doc_controller: DocumentController) -> None:
         document_id=doc_id, output_dir=output_dir
     )
 
-    print()
-    if result.get("success"):
-        print(f"  {_ok(result['message'])}")
-        print(f"    {_bold('Document ID')}      : {result['document_id']}")
-        print(f"    {_bold('File name')}        : {result['original_filename']}")
-        print(f"    {_bold('Size')}             : {result['file_size']:,} bytes")
-        print(f"    {_bold('Output path')}      : {result['output_path']}")
+    def _download_details(r: dict[str, Any]) -> None:
+        print(f"    {_bold('Document ID')}      : {r['document_id']}")
+        print(f"    {_bold('File name')}        : {r['original_filename']}")
+        print(f"    {_bold('Size')}             : {r['file_size']:,} bytes")
+        print(f"    {_bold('Output path')}      : {r['output_path']}")
         print(f"    {_bold('Integrity')}        : {_ok('Verified (SHA-256)')}")
-    else:
-        print(f"  {_err(result['error'])}")
+
+    _show_result(result, _download_details)
 
 
 def _handle_share(doc_controller: DocumentController) -> None:
@@ -558,14 +603,12 @@ def _handle_share(doc_controller: DocumentController) -> None:
         document_id=doc_id, recipient_username=recipient
     )
 
-    print()
-    if result.get("success"):
-        print(f"  {_ok(result['message'])}")
-        print(f"    {_bold('Document ID')}       : {result['document_id']}")
-        print(f"    {_bold('Recipient')}         : {result['recipient_username']}")
-        print(f"    {_bold('Permission')}        : {result['permission']}")
-    else:
-        print(f"  {_err(result['error'])}")
+    def _share_details(r: dict[str, Any]) -> None:
+        print(f"    {_bold('Document ID')}       : {r['document_id']}")
+        print(f"    {_bold('Recipient')}         : {r['recipient_username']}")
+        print(f"    {_bold('Permission')}        : {r['permission']}")
+
+    _show_result(result, _share_details)
 
 
 def _handle_audit_logs(audit_controller: AuditController) -> None:
@@ -599,27 +642,10 @@ def _handle_audit_logs(audit_controller: AuditController) -> None:
             f"  ({total} log{'s' if total != 1 else ''})"
         )
         print()
-        print(
-            f"  {_C.DIM}{'TIMESTAMP':<20} {'USER':<12} {'ACTION':<22} "
-            f"{'SEVERITY':<10} {'STATUS':<10} RESOURCE{_C.RESET}"
-        )
-        print(f"  {_C.DIM}{'-'*80}{_C.RESET}")
+        _print_audit_table_header()
 
         for log in logs:
-            ts: str = log.get("timestamp", "")
-            if hasattr(ts, "strftime"):
-                ts = ts.strftime("%Y-%m-%d %H:%M")
-            else:
-                ts = str(ts)[:16]
-            username: str = log.get("username", "-")[:12]
-            action: str = log.get("action", "")[:22]
-            severity: str = log.get("severity", "")[:10]
-            status: str = log.get("status", "")[:10]
-            resource: str = log.get("resource_name", log.get("resource_id", ""))[:30]
-            print(
-                f"  {ts:<20} {username:<12} {action:<22} "
-                f"{severity:<10} {status:<10} {resource}"
-            )
+            print(_format_audit_log_row(log))
 
         print()
         if has_next:
@@ -687,57 +713,16 @@ def _handle_audit_search(audit_controller: AuditController) -> None:
     )
     print()
     for log in logs:
-        print(f"  {_C.DIM}[{log.get('timestamp', '')}]{_C.RESET} "
-              f"{log.get('username', '-')} | "
-              f"{log.get('action', '')} | "
-              f"{log.get('severity', '')} | "
-              f"{log.get('status', '')} | "
-              f"{log.get('message', '')}")
+        _print_audit_search_entry(log)
 
 
 def _handle_shared_documents(doc_controller: DocumentController) -> None:
     """List documents shared with the current user."""
-    print()
-    print(f"  {_bold('--- Shared With Me ---')}")
-    print()
-
-    page: int = 1
-    while True:
-        result = doc_controller.list_shared_with_me(page=page)
-
-        if not result.get("success"):
-            print(f"  {_err(result['error'])}")
-            return
-
-        documents = result.get("documents", [])
-        pagination = result.get("pagination", {})
-
-        if not documents:
-            if page == 1:
-                print(f"  {_info('No documents have been shared with you yet.')}")
-            else:
-                print(f"  {_info('No more documents.')}")
-            return
-
-        total = pagination.get("total", 0)
-        print(
-            f"  {_bold(f'Page {pagination['page']}/{pagination['total_pages']}')}"
-            f"  ({total} document{'s' if total != 1 else ''})"
-        )
-        print()
-
-        for i, doc in enumerate(documents, start=1):
-            _print_document_summary(doc, index=i)
-
-        print()
-        if pagination.get("has_next"):
-            choice: str = input(
-                f"  {_info('[N]ext page, [Q]uit to menu: ')}"
-            ).strip().lower()
-            if choice == "n":
-                page += 1
-                continue
-        break
+    _paginate_documents(
+        title="Shared With Me",
+        empty_msg="No documents have been shared with you yet.",
+        fetch_fn=lambda p: doc_controller.list_shared_with_me(page=p),
+    )
 
 
 def _handle_upload(doc_controller: DocumentController) -> None:
@@ -755,13 +740,11 @@ def _handle_upload(doc_controller: DocumentController) -> None:
     print(f"  {_info('Uploading and encrypting ...')}")
     result: dict[str, Any] = doc_controller.upload(file_path)
 
-    print()
-    if result.get("success"):
-        print(f"  {_ok(result['message'])}")
-        print(f"    {_bold('Document ID')}  : {result['document_id']}")
-        print(f"    {_bold('File name')}    : {result['original_filename']}")
-        print(f"    {_bold('Size')}         : {result['file_size']:,} bytes")
-        print(f"    {_bold('MIME type')}    : {result['mime_type']}")
-        print(f"    {_bold('SHA-256')}      : {result['sha256_hash']}")
-    else:
-        print(f"  {_err(result['error'])}")
+    def _upload_details(r: dict[str, Any]) -> None:
+        print(f"    {_bold('Document ID')}  : {r['document_id']}")
+        print(f"    {_bold('File name')}    : {r['original_filename']}")
+        print(f"    {_bold('Size')}         : {r['file_size']:,} bytes")
+        print(f"    {_bold('MIME type')}    : {r['mime_type']}")
+        print(f"    {_bold('SHA-256')}      : {r['sha256_hash']}")
+
+    _show_result(result, _upload_details)

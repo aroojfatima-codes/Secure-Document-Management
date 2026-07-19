@@ -89,11 +89,11 @@ class AuthService:
 
         try:
             user: User | None = self._user_repo.get_by_username(normalized_username)
-        except DatabaseError:
+        except DatabaseError as exc:
             logger.error("Database unavailable during login for '%s'.", normalized_username)
             raise DatabaseError(
                 "Database is unavailable. Please try again later."
-            )
+            ) from exc
 
         if user is None:
             logger.warning(
@@ -201,11 +201,9 @@ class AuthService:
         if errors:
             raise ValidationError(" ".join(errors))
 
-    @staticmethod
-    def _verify_password(plaintext: str, stored_hash: str) -> bool:
+    def _verify_password(self, plaintext: str, stored_hash: str) -> bool:
         """Hash *plaintext* with SHA-256 and compare to *stored_hash*.
 
         The plaintext is discarded immediately after the comparison.
         """
-        hasher: SHA256Hasher = SHA256Hasher()
-        return hasher.verify(plaintext.encode("utf-8"), stored_hash)
+        return self._hasher.verify(plaintext.encode("utf-8"), stored_hash)

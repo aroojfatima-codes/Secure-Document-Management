@@ -13,6 +13,7 @@ C = tm.C
 
 class DashboardPage(ctk.CTkFrame):
     def __init__(self, master, user: dict | None = None, **kw):
+        kw.pop("fg_color", None)
         super().__init__(master, fg_color=C.bg_main, **kw)
         self._user = user or {}
 
@@ -108,10 +109,38 @@ class DashboardPage(ctk.CTkFrame):
         bottom_row.grid_columnconfigure(0, weight=1)
         bottom_row.grid_columnconfigure(1, weight=1)
 
-        activity_frame = ctk.CTkFrame(
+        quick_actions_frame = ctk.CTkFrame(
             bottom_row, fg_color=C.bg_card, corner_radius=Dim.RADIUS_LG,
         )
-        activity_frame.grid(row=0, column=0, padx=(0, Dim.PAD_SM), sticky="nsew")
+        quick_actions_frame.grid(row=0, column=0, padx=(0, Dim.PAD_SM), sticky="nsew")
+        ctk.CTkLabel(
+            quick_actions_frame, text="Quick Actions", font=Fonts.SUBTITLE,
+            text_color=C.text_primary,
+        ).pack(anchor="w", padx=Dim.PAD_MD, pady=(Dim.PAD_MD, 0))
+
+        actions_data = [
+            ("\u2B06", "Upload Document", "Encrypt & store files", C.primary),
+            ("\u25A3", "View Documents", "Browse your library", C.info),
+            ("\uD83D\uDD17", "Share Files", "Share with team members", C.success),
+            ("\uD83D\uDD0D", "Search", "Find documents quickly", C.warning),
+        ]
+        for icon, title, desc, color in actions_data:
+            action = ActionCard(
+                quick_actions_frame, title=title, icon=icon,
+                description=desc, accent=color, height=60,
+            )
+            action.pack(fill="x", padx=Dim.PAD_MD, pady=3)
+
+        right_col = ctk.CTkFrame(bottom_row, fg_color="transparent")
+        right_col.grid(row=0, column=1, padx=(Dim.PAD_SM, 0), sticky="nsew")
+        right_col.grid_rowconfigure(0, weight=1)
+        right_col.grid_rowconfigure(1, weight=1)
+        right_col.grid_columnconfigure(0, weight=1)
+
+        activity_frame = ctk.CTkFrame(
+            right_col, fg_color=C.bg_card, corner_radius=Dim.RADIUS_LG,
+        )
+        activity_frame.grid(row=0, column=0, sticky="nsew", pady=(0, Dim.PAD_SM))
         ctk.CTkLabel(
             activity_frame, text="Recent Activity", font=Fonts.SUBTITLE,
             text_color=C.text_primary,
@@ -137,9 +166,9 @@ class DashboardPage(ctk.CTkFrame):
             ).pack(side="right")
 
         system_frame = ctk.CTkFrame(
-            bottom_row, fg_color=C.bg_card, corner_radius=Dim.RADIUS_LG,
+            right_col, fg_color=C.bg_card, corner_radius=Dim.RADIUS_LG,
         )
-        system_frame.grid(row=0, column=1, padx=(Dim.PAD_SM, 0), sticky="nsew")
+        system_frame.grid(row=1, column=0, sticky="nsew")
         ctk.CTkLabel(
             system_frame, text="System Status", font=Fonts.SUBTITLE,
             text_color=C.text_primary,
@@ -168,11 +197,6 @@ class DashboardPage(ctk.CTkFrame):
                 text_color=C.text_on_primary,
             ).pack(padx=8, expand=True)
 
-        ctk.CTkLabel(
-            system_frame, text="", font=Fonts.TINY, text_color=C.text_dim,
-        ).pack(pady=Dim.PAD_SM)
-
-        system_frame.update_idletasks()
         ctk.CTkLabel(
             system_frame, text="\u26A1 System healthy \u2014 all services operational",
             font=Fonts.TINY, text_color=C.success,

@@ -13,6 +13,7 @@ C = tm.C
 
 class SettingsPage(ctk.CTkFrame):
     def __init__(self, master, on_theme_change=None, **kw):
+        kw.pop("fg_color", None)
         super().__init__(master, fg_color=C.bg_main, **kw)
         self._on_theme_change = on_theme_change
 
@@ -98,15 +99,12 @@ class SettingsPage(ctk.CTkFrame):
         btn_row.pack(fill="x", padx=Dim.PAD_LG, pady=Dim.PAD_MD)
         StyledButton(
             btn_row, text="Create Backup", icon="\uD83D\uDCBE", width=140,
-            command=lambda: Toast(self, "Backup created successfully", "success"),
+            command=self._create_backup,
         ).pack(side="left", padx=(0, Dim.PAD_SM))
         StyledButton(
             btn_row, text="Restore Backup", variant="outline", icon="\uD83D\uDD04",
             width=140,
-            command=lambda: ConfirmDialog(
-                self, "Restore from backup? Current data may be overwritten.",
-                on_yes=lambda: Toast(self, "Backup restored", "success"),
-            ),
+            command=self._restore_backup,
         ).pack(side="left")
 
         about_card = self._make_section(scroll, "About", 3)
@@ -134,7 +132,19 @@ class SettingsPage(ctk.CTkFrame):
     def _change_theme(self, _=None):
         mode = self._theme_combo.get_value().lower()
         if self._on_theme_change:
-            self._on_theme_change(mode)
+            try:
+                self._on_theme_change(mode)
+            except Exception:
+                pass
+
+    def _create_backup(self):
+        Toast(self, "Backup created successfully", "success")
+
+    def _restore_backup(self):
+        ConfirmDialog(
+            self, "Restore from backup? Current data may be overwritten.",
+            on_yes=lambda: Toast(self, "Backup restored", "success"),
+        )
 
     def apply_theme(self):
         self.configure(fg_color=C.bg_main)

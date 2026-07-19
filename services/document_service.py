@@ -162,18 +162,22 @@ class DocumentUploadService:
             }
 
         except SDMSException:
-            self._storage_mgr.delete_encrypted_file(encrypted_filename)
+            self._cleanup(encrypted_filename)
             raise
         except OSError as exc:
-            self._storage_mgr.delete_encrypted_file(encrypted_filename)
+            self._cleanup(encrypted_filename)
             raise FileHandlingError(
                 f"File operation failed during upload: {exc}"
             ) from exc
         except Exception as exc:
-            self._storage_mgr.delete_encrypted_file(encrypted_filename)
+            self._cleanup(encrypted_filename)
             raise SDMSException(
                 f"Unexpected error during document upload: {exc}"
             ) from exc
+
+    def _cleanup(self, encrypted_filename: str) -> None:
+        """Remove the encrypted file on failure."""
+        self._storage_mgr.delete_encrypted_file(encrypted_filename)
 
     # ------------------------------------------------------------------
     # Validation

@@ -2,7 +2,7 @@
 
 These dataclasses encapsulate everything needed to decrypt a piece of
 data: the ciphertext itself, the algorithm used, the initialisation
-vector (for AES), and — for hybrid-encryption scenarios — the
+vector (for AES), and -- for hybrid-encryption scenarios -- the
 RSA-wrapped AES key.
 
 Modules that sit above the cryptography layer (services, controllers)
@@ -11,7 +11,7 @@ work with these payload objects instead of raw byte tuples.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
@@ -27,7 +27,7 @@ class EncryptedPayload:
 
     ciphertext: bytes
     iv: bytes
-    algorithm: str = field(default="AES-256-CBC")
+    algorithm: str = "AES-256-CBC"
 
 
 @dataclass(frozen=True)
@@ -46,5 +46,5 @@ class EncryptedKeyPayload:
 
     encrypted_key: bytes
     iv: bytes
-    wrapped_algorithm: str = field(default="RSA-2048-OAEP-SHA-256")
-    data_algorithm: str = field(default="AES-256-CBC")
+    wrapped_algorithm: str = "RSA-2048-OAEP-SHA-256"
+    data_algorithm: str = "AES-256-CBC"
