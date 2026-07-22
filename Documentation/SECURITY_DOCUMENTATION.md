@@ -777,7 +777,7 @@ mongodb+srv://user:password@cluster.example.com/db?tls=true
 | Issue | Recommendation |
 |-------|----------------|
 | No HTTPS | If a web interface is added, enforce HTTPS with Let's Encrypt |
-| No 2FA | Add TOTP or SMS-based second factor |
+
 | No password rotation | Enforce periodic password changes |
 | No account lockout | Lock accounts after N failed attempts |
 | No session timeout | Add automatic session expiration |

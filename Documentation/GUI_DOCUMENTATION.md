@@ -1074,8 +1074,6 @@ Application configuration including appearance, security, and backup/restore set
 | Color swatch ×8 | `StyledButton` | — | `width=36`, `height=36`, `corner_radius=18` | Color selection buttons |
 | **Security Section:** | | | | |
 | Section header | `CTkLabel` | — | `text="Security"`, `font=("Helvetica", 16, "bold")` | Section title |
-| 2FA toggle | `CTkButton` | — | `text="Enable 2FA"` / `text="Disable 2FA"` | Two-factor auth toggle |
-| 2FA status | `StatusBadge` | — | `status="active"/"inactive"` | Current 2FA state |
 | Session timeout combo | `StyledComboBox` | — | `values=["15 min", "30 min", "60 min", "120 min"]` | Session expiry duration |
 | **Backup Section:** | | | | |
 | Section header | `CTkLabel` | — | `text="Backup & Restore"`, `font=("Helvetica", 16, "bold")` | Section title |
@@ -1096,9 +1094,6 @@ Application configuration including appearance, security, and backup/restore set
 │  └─────────────────────────────────────────────────┘ │
 │                                                      │
 │  ┌─ Security ─────────────────────────────────────┐ │
-│  │ Two-Factor Authentication:                     │ │
-│  │ [Enable 2FA]  ✅ Active                        │ │
-│  │                                                 │ │
 │  │ Session Timeout: [30 min ▼]                    │ │
 │  └─────────────────────────────────────────────────┘ │
 │                                                      │
@@ -1117,7 +1112,6 @@ Application configuration including appearance, security, and backup/restore set
 
 - **Theme change:** Calls `customtkinter.set_appearance_mode(mode)` + `ThemeManager.instance().set_mode(mode)`
 - **Accent color:** Updates `ThemeManager.instance().COLORS["primary"]` and refreshes all widgets
-- **2FA toggle:** Calls `AuthController` to enable/disable 2FA
 - **Session timeout:** Updates `Settings.instance().session_timeout` and `SessionManager`
 - **Backup:** Calls `StorageManager.instance().create_backup(destination_path)` via `filedialog.asksaveasfilename()`
 - **Restore:** Calls `StorageManager.instance().restore_backup(backup_path)` via `filedialog.askopenfilename()`
@@ -1137,7 +1131,6 @@ Application configuration including appearance, security, and backup/restore set
   - `#FFA726` (orange), `#2196F3` (blue), `#95A5A6` (gray), `#E91E63` (magenta)
   - Active swatch: `border_width=3`, `border_color=white`
 - **Sections:** Each section in an `InfoCard` with bold header
-- **2FA toggle:** Button text and badge update on toggle
 - **Theme switch:** Instant effect — entire UI updates colors immediately
 
 ---

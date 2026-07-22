@@ -31,8 +31,6 @@ class Session:
         rsa_public_key:  PEM-encoded RSA public key.
         rsa_private_key: PEM-encoded RSA private key.
         login_timestamp: When the session was created.
-        is_2fa_verified: Whether 2FA has been completed for this session.
-        two_factor_verified_at: When 2FA was verified, if applicable.
     """
 
     session_id: str = ""
@@ -44,8 +42,7 @@ class Session:
     login_timestamp: datetime = field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
-    is_2fa_verified: bool = False
-    two_factor_verified_at: datetime | None = None
+
 
     def to_dict(self) -> dict[str, Any]:
         """Return session data as a plain dict (safe for logging)."""

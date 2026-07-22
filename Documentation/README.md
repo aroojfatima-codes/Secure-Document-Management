@@ -451,7 +451,7 @@ mypy .
 | Cloud Storage | Migrate file storage to AWS S3 / MinIO with server-side encryption |
 | Zero-Knowledge Proofs | Add ZKP-based document verification without revealing content |
 | Database Encryption | Enable MongoDB field-level encryption for at-rest metadata protection |
-| Multi-Factor Auth | TOTP / hardware key support alongside face recognition |
+
 | Versioning | Document version history with diff comparison |
 | Real-Time Sync | WebSocket-based live collaboration on shared documents |
 | Mobile Client | React Native companion app with on-device face enrollment |

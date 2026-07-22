@@ -1,6 +1,6 @@
 # Secure Document Management System (SDMS)
 
-A production-grade **Secure Document Management System** with hybrid cryptography (AES-256-CBC + RSA-2048-OAEP), SHA-256 integrity verification, face recognition authentication, TOTP 2FA, Role-Based Access Control (RBAC), and a full audit trail. Features both a **CustomTkinter desktop GUI** (14 screens) and a **FastAPI REST API**.
+A production-grade **Secure Document Management System** with hybrid cryptography (AES-256-CBC + RSA-2048-OAEP), SHA-256 integrity verification, face recognition authentication, Role-Based Access Control (RBAC), and a full audit trail. Features both a **CustomTkinter desktop GUI** (14 screens) and a **FastAPI REST API**.
 
 ---
 
@@ -12,7 +12,7 @@ A production-grade **Secure Document Management System** with hybrid cryptograph
 | **Integrity Verification** | SHA-256 hashing on upload; verified on download |
 | **Secure Sharing** | Re-encrypt AES key with recipient's RSA public key; encrypted file untouched |
 | **Face Recognition** | OpenCV Haar Cascade detection + LBPH recognition + Chi-Square matching |
-| **TOTP 2FA** | RFC 6238 time-based one-time passwords via HMAC-SHA256 |
+
 | **RBAC** | Admin, Editor, Viewer roles with 15 granular permissions |
 | **Audit Trail** | Every action logged with 32 action types, 4 severity levels, IP, timestamp |
 | **Desktop GUI** | 14-screen CustomTkinter app with dark/light theme, animations, charts |
@@ -59,7 +59,7 @@ secure-document-management/
 ├── models/                  # User, Document, AuditLog data models
 ├── services/                # Business logic (auth, registration, document, face, audit)
 ├── storage/                 # On-disk encrypted document storage
-├── utilities/               # Permissions (RBAC), TOTP (2FA), helpers
+├── utilities/               # Permissions (RBAC), helpers
 ├── tests/                   # pytest suite (9 test files)
 ├── Documentation/           # Detailed architecture, security, GUI docs
 ├── .env                     # Environment configuration
