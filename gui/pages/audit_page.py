@@ -22,52 +22,50 @@ class AuditPage(ctk.CTkFrame):
         self._logs = []
 
         self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(2, weight=1)
+        self.grid_rowconfigure(1, weight=1)
         self._build_header()
-        self._build_filters()
         self._build_content()
 
     def _build_header(self):
         header = ctk.CTkFrame(self, fg_color="transparent")
         header.grid(row=0, column=0, sticky="ew", padx=Dim.PAD_XL, pady=(Dim.PAD_XL, 0))
-        header.grid_columnconfigure(1, weight=1)
+        header.grid_columnconfigure(2, weight=1)
         ctk.CTkLabel(
             header, text="Audit Logs", font=Fonts.TITLE,
             text_color=C.text_primary,
         ).grid(row=0, column=0, sticky="w")
+
+        filters = ctk.CTkFrame(header, fg_color="transparent")
+        filters.grid(row=0, column=1, sticky="e", padx=(Dim.PAD_MD, 0))
+
+        self._action_filter = StyledComboBox(
+            filters, values=["All", "UPLOAD", "DOWNLOAD", "DELETE", "SHARE", "LOGIN", "FACE_LOGIN"],
+            width=140,
+        )
+        self._action_filter.pack(side="left", padx=(0, Dim.PAD_SM))
+
+        self._user_filter = StyledEntry(
+            filters, placeholder="Filter by user...", width=140,
+        )
+        self._user_filter.pack(side="left", padx=(0, Dim.PAD_SM))
+
+        self._search = StyledEntry(
+            filters, placeholder="Search logs...", width=160,
+        )
+        self._search.pack(side="left", padx=(0, Dim.PAD_SM))
+        self._search.entry.bind("<KeyRelease>", lambda e: self._apply_filter())
+
+        StyledButton(
+            header, text="Apply", variant="outline", width=70,
+            command=self._apply_filter,
+        ).grid(row=0, column=3, padx=(Dim.PAD_SM, 0))
+
         StyledButton(
             header, text="Export CSV", variant="outline", width=110,
             command=self._export,
-        ).grid(row=0, column=1, sticky="e")
+        ).grid(row=0, column=4, padx=(Dim.PAD_SM, 0))
 
-    def _build_filters(self):
-        filters = ctk.CTkFrame(self, fg_color=C.bg_card, corner_radius=Dim.RADIUS_LG)
-        filters.grid(row=1, column=0, sticky="ew",
-                     padx=Dim.PAD_XL, pady=Dim.PAD_MD)
-        ctk.CTkLabel(
-            filters, text="Action:", font=Fonts.BODY, text_color=C.text_secondary,
-        ).pack(side="left", padx=(Dim.PAD_MD, 4), pady=Dim.PAD_MD)
-        self._action_filter = StyledComboBox(
-            filters, values=["All", "Upload", "Download", "Share", "Login", "Logout"], width=120,
-        )
-        self._action_filter.combo.configure(command=lambda _: self._apply_filter())
-        self._action_filter.pack(side="left", padx=4, pady=Dim.PAD_MD)
-        ctk.CTkLabel(
-            filters, text="User:", font=Fonts.BODY, text_color=C.text_secondary,
-        ).pack(side="left", padx=(Dim.PAD_MD, 4), pady=Dim.PAD_MD)
-        self._user_filter = StyledComboBox(
-            filters, values=["All Users", "admin", "officer", "viewer"], width=120,
-        )
-        self._user_filter.combo.configure(command=lambda _: self._apply_filter())
-        self._user_filter.pack(side="left", padx=4, pady=Dim.PAD_MD)
-        ctk.CTkLabel(
-            filters, text="Search:", font=Fonts.BODY, text_color=C.text_secondary,
-        ).pack(side="left", padx=(Dim.PAD_MD, 4), pady=Dim.PAD_MD)
-        self._search = StyledEntry(
-            filters, placeholder="Search logs...", width=200,
-        )
-        self._search.entry.bind("<KeyRelease>", lambda _: self._apply_filter())
-        self._search.pack(side="left", padx=4, pady=Dim.PAD_MD)
+
 
     def _build_content(self):
         scroll = ctk.CTkScrollableFrame(

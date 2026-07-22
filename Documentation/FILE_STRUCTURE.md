@@ -15,14 +15,13 @@
 6. [services/](#services)
 7. [controllers/](#controllers)
 8. [gui/](#gui)
-9. [cli/](#cli)
-10. [utilities/](#utilities)
-11. [exceptions/](#exceptions)
-12. [logger/](#logger)
-13. [storage/](#storage)
-14. [tests/](#tests)
-15. [Static Directories](#static-directories)
-16. [Cross-Module Communication Diagram](#cross-module-communication-diagram)
+9. [utilities/](#utilities)
+10. [exceptions/](#exceptions)
+11. [logger/](#logger)
+12. [storage/](#storage)
+13. [tests/](#tests)
+14. [Static Directories](#static-directories)
+15. [Cross-Module Communication Diagram](#cross-module-communication-diagram)
 
 ---
 
@@ -30,7 +29,7 @@
 
 | File | Lines | Purpose | Key Classes/Functions | Dependencies | Imported Modules | Communication |
 |------|-------|---------|----------------------|--------------|-----------------|---------------|
-| `main.py` | 73 | Application entry point. Parses CLI args to launch either the GUI (`App`) or the CLI (`CLIApp`). Initializes logging, loads environment, and bootstraps all singletons before starting the chosen interface. | `main()`, `launch_gui()`, `launch_cli()` | `config.settings`, `gui.app`, `cli.main`, `logger.logging_config` | `argparse`, `sys`, `os` | Imports `App` from `gui.app`, `CLIApp` from `cli.main`, `Settings` from `config.settings`, and `setup_logging` from `logger.logging_config`. Calls `Settings.load()` first, then `setup_logging()`, then launches the appropriate interface. |
+| `main.py` | 73 | Application entry point. Initializes logging, loads environment, and bootstraps all singletons before launching the GUI. | `main()` | `config.settings`, `gui.app`, `logger.logging_config` | `argparse`, `sys`, `os` | Imports `SDMSApp` from `gui.app`, `Settings` from `config.settings`, and `setup_logging` from `logger.logging_config`. Calls `Settings.load()` first, then `setup_logging()`, then launches the GUI. |
 | `.env` | — | Stores environment variables loaded at startup. Contains `APP_NAME`, `MONGODB_URI`, `MONGODB_DB_NAME`, `SECRET_KEY`, `ENCRYPTION_KEY`, `LOG_LEVEL`, and optional `FACE_RECOGNITION_TOLERANCE`. | N/A | None | N/A | Read by `config/settings.py` via `python-dotenv`. |
 | `requirements.txt` | — | Lists all pinned Python dependencies for `pip install -r`. | N/A | None | N/A | Referenced by `pyproject.toml` and CI pipelines. |
 | `pyproject.toml` | — | Project metadata and `mypy` strict-mode configuration. Defines target Python version, exclude patterns, and plugin settings. | N/A | None | N/A | Consumed by `mypy`, `pytest`, and build tools. |
@@ -211,17 +210,6 @@ Full-screen page widgets. Each page is a `CTkFrame` subclass.
 
 ---
 
-## cli/
-
-Command-line interface. Full-featured CLI alternative to the GUI.
-
-| File | Lines | Purpose | Key Classes/Functions | Dependencies | Imported Modules | Communication |
-|------|-------|---------|----------------------|--------------|-----------------|---------------|
-| `__init__.py` | 0 | Package marker. Empty. | N/A | None | None | N/A |
-| `main.py` | 767 | **Complete CLI application.** `CLIApp` class with 13 menu options: 1) Login, 2) Register, 3) Upload Document, 4) Download Document, 5) List Documents, 6) Share Document, 7) View Shared Documents, 8) Search Documents, 9) Face Enrollment, 10) Face Verification, 11) View Audit Logs, 12) User Profile, 13) Logout. Uses `getpass` for hidden password input, `colorama` for colored terminal output, `rich` tables for formatted display. Each option delegates to the same controllers used by the GUI. | `CLIApp` | `controllers.auth_controller.AuthController`, `controllers.document_controller.DocumentController`, `controllers.audit_controller.AuditController`, `controllers.face_controller.FaceController`, `services.session_manager.SessionManager` | `getpass`, `colorama`, `rich.console.Console`, `rich.table.Table`, `os`, `typing`, `sys` | Uses the exact same controller and service layer as the GUI. The only difference is the presentation layer. This proves the MVC separation works — controllers are interface-agnostic. Calls `AuthController.handle_login()`, `DocumentController.handle_upload()`, etc. directly. |
-
----
-
 ## utilities/
 
 Cross-cutting utility functions.
@@ -229,7 +217,7 @@ Cross-cutting utility functions.
 | File | Lines | Purpose | Key Classes/Functions | Dependencies | Imported Modules | Communication |
 |------|-------|---------|----------------------|--------------|-----------------|---------------|
 | `__init__.py` | 0 | Package marker. Empty. | N/A | None | None | N/A |
-| `helpers.py` | 100 | **Shared utility functions.** `get_timestamp() → str` (ISO format), `get_formatted_timestamp() → str` (human-readable), `sanitize_filename(name) → str` (removes special chars, limits length), `validate_email(email) → bool` (regex check), `validate_password_strength(password) → tuple[bool, str]` (min 8, upper, lower, digit, special), `format_file_size(bytes) → str` (human-readable: KB/MB/GB), `truncate_string(s, max_len) → str`. | `get_timestamp()`, `get_formatted_timestamp()`, `sanitize_filename()`, `validate_email()`, `validate_password_strength()`, `format_file_size()`, `truncate_string()` | None | `re`, `datetime.datetime`, `typing.Tuple` | Imported by `services/registration_service.py` (email/password validation), `services/document_service.py` (filename sanitization), `gui/pages/document_detail_page.py` (file size formatting, string truncation), `cli/main.py` (input validation). |
+| `helpers.py` | 100 | **Shared utility functions.** `get_timestamp() → str` (ISO format), `get_formatted_timestamp() → str` (human-readable), `sanitize_filename(name) → str` (removes special chars, limits length), `validate_email(email) → bool` (regex check), `validate_password_strength(password) → tuple[bool, str]` (min 8, upper, lower, digit, special), `format_file_size(bytes) → str` (human-readable: KB/MB/GB), `truncate_string(s, max_len) → str`. | `get_timestamp()`, `get_formatted_timestamp()`, `sanitize_filename()`, `validate_email()`, `validate_password_strength()`, `format_file_size()`, `truncate_string()` | None | `re`, `datetime.datetime`, `typing.Tuple` | Imported by `services/registration_service.py` (email/password validation), `services/document_service.py` (filename sanitization), `gui/pages/document_detail_page.py` (file size formatting, string truncation). |
 
 ---
 
@@ -310,13 +298,11 @@ Pytest test suite. 7 test files with 207-line conftest providing shared fixtures
 │  Parses args → App() or CLIApp()                        │
 └──────────────┬────────────────────┬─────────────────────┘
                │                    │
-        ┌──────▼──────┐     ┌──────▼──────┐
-        │   GUI Layer │     │   CLI Layer  │
-        │  (gui/app)  │     │  (cli/main)  │
-        └──────┬──────┘     └──────┬──────┘
-               │                    │
-               └────────┬───────────┘
-                        │
+        ┌──────▼──────┐
+        │   GUI Layer │
+        │  (gui/app)  │
+        └──────┬──────┘
+               │
         ┌───────────────▼───────────────┐
         │     Controller Layer          │
         │  auth_controller              │

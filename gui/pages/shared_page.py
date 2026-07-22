@@ -5,7 +5,7 @@ import customtkinter as ctk
 from gui.theme import ThemeManager, Dim, Fonts
 from gui.components.tables import StyledTable
 from gui.components.forms import StyledButton, StyledComboBox, StyledEntry
-from gui.components.dialogs import Toast, ConfirmDialog
+from gui.components.dialogs import Toast, ConfirmDialog, SuccessDialog, ErrorDialog
 from gui.smooth_scrolling import bind_smooth_scroll
 
 tm = ThemeManager()
@@ -13,10 +13,15 @@ C = tm.C
 
 
 class SharedPage(ctk.CTkFrame):
-    def __init__(self, master, **kw):
+    def __init__(self, master, controller=None, user: dict | None = None, **kw):
         kw.pop("fg_color", None)
         super().__init__(master, fg_color=C.bg_main, **kw)
+        self._controller = controller
         self._shared = []
+        self._app = None
+        self._user = user or {}
+        self._role = self._user.get("role", "viewer").lower()
+        self._can_revoke = self._role in ("admin", "editor")
 
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
@@ -32,7 +37,7 @@ class SharedPage(ctk.CTkFrame):
             text_color=C.text_primary,
         ).grid(row=0, column=0, sticky="w")
         self._filter = StyledComboBox(
-            header, values=["All", "Shared With Me", "Shared By Me"], width=180,
+            header, values=["All", "Shared With Me"], width=180,
         )
         self._filter.combo.configure(command=self._apply_filter)
         self._filter.grid(row=0, column=1, sticky="e", padx=(0, Dim.PAD_SM))
@@ -70,14 +75,15 @@ class SharedPage(ctk.CTkFrame):
         btn_frame = ctk.CTkFrame(self, fg_color="transparent")
         btn_frame.grid(row=2, column=0, sticky="ew",
                        padx=Dim.PAD_XL, pady=(0, Dim.PAD_XL))
-        StyledButton(
-            btn_frame, text="Revoke Access", variant="danger",
-            command=self._revoke, width=140,
-        ).pack(side="left")
+        if self._can_revoke:
+            StyledButton(
+                btn_frame, text="Revoke Access", variant="danger",
+                command=self._revoke, width=140,
+            ).pack(side="left")
 
-    def load_shared(self, shared: list[dict]):
-        self._shared = shared
-        self._table.insert_rows(shared)
+    def load_documents(self, docs: list[dict]):
+        self._shared = docs
+        self._table.insert_rows(docs)
 
     def _apply_filter(self, _=None):
         mode = self._filter.get_value()
@@ -97,18 +103,57 @@ class SharedPage(ctk.CTkFrame):
         self._table.insert_rows(filtered)
 
     def _refresh(self):
-        self._table.insert_rows(self._shared)
-        Toast(self, "Shared documents refreshed", "info")
+        if self._controller:
+            try:
+                result = self._controller["document"].list_shared_with_me(1, 50)
+                if result and result.get("success"):
+                    docs = result.get("documents", [])
+                    for d in docs:
+                        d["direction"] = "to_me"
+                    self._shared = docs
+                    self._table.insert_rows(self._shared)
+                    Toast(self, "Shared documents refreshed", "info")
+                else:
+                    Toast(self, "Failed to refresh shared documents", "error")
+            except Exception as exc:
+                Toast(self, f"Refresh error: {exc}", "error")
+        else:
+            self._table.insert_rows(self._shared)
+            Toast(self, "Shared documents refreshed", "info")
 
     def _revoke(self):
         sel = self._table.get_selected()
         if not sel:
             Toast(self, "Select a share entry to revoke", "warning")
             return
+        doc_id = sel.get("document_id", "")
+        doc_name = sel.get("original_filename", "file")
+        owner_id = sel.get("owner_id", "")
+
+        if not self._controller:
+            Toast(self, "No controller available", "error")
+            return
+
+        def do_revoke():
+            try:
+                result = self._controller["document"].revoke_share(doc_id, owner_id)
+                if result and result.get("success"):
+                    SuccessDialog(
+                        self,
+                        message=f"Access revoked for '{doc_name}'.",
+                        title="Access Revoked",
+                    )
+                    self._refresh()
+                else:
+                    error_msg = result.get("error", "Revoke failed") if result else "Revoke failed"
+                    ErrorDialog(self, message=str(error_msg), title="Revoke Failed")
+            except Exception as exc:
+                ErrorDialog(self, message=f"Revoke error: {exc}", title="Revoke Error")
+
         ConfirmDialog(
             self,
-            f"Revoke access for '{sel.get('original_filename', sel.get('filename', 'file'))}'?",
-            on_yes=lambda: Toast(self, "Access revoked", "success"),
+            f"Revoke access for '{doc_name}'?",
+            on_yes=do_revoke,
         )
 
     def apply_theme(self):

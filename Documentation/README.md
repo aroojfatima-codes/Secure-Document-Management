@@ -132,11 +132,6 @@ security does not have to come at the expense of usability.
 - **Responsive Layout** — pages adapt to window resize with grid-based layouts.
 - **Toast Notifications** — non-intrusive success/error/info messages.
 
-### CLI Interface
-
-- A secondary command-line interface (`python main.py --cli`) for users who
-  prefer terminal-based interaction or need to operate without a display server.
-
 ---
 
 ## Technologies Used
@@ -262,10 +257,6 @@ Secure-Document-Management/
 │       ├── loading.py               # Loading spinner / progress
 │       └── tables.py                # Reusable table widget
 │
-├── cli/
-│   ├── __init__.py
-│   └── main.py                      # CLI entry point & commands
-│
 ├── storage/
 │   ├── __init__.py
 │   ├── manager.py                   # StorageManager (dir init)
@@ -387,11 +378,7 @@ STORAGE_MAX_FILE_SIZE_MB=50
 ### Step 6 — Run the Application
 
 ```bash
-# GUI mode (default)
 python main.py
-
-# CLI mode
-python main.py --cli
 ```
 
 ---

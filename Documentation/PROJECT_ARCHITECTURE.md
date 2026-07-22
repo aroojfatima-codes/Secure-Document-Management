@@ -51,21 +51,21 @@ and infrastructure. The system is designed around these principles:
 ┌─────────────────────────────────────────────────────────────────────┐
 │                     PRESENTATION LAYER                              │
 │                                                                     │
-│   ┌─────────────────────┐          ┌──────────────────────┐        │
-│   │   GUI (CustomTkinter)│          │   CLI (argparse)     │        │
-│   │                      │          │                      │        │
-│   │  14 Pages            │          │  main.py --cli       │        │
-│   │  8 Components        │          │  Command dispatch    │        │
-│   │  ThemeManager        │          │                      │        │
-│   │  Animations          │          │                      │        │
-│   └──────────┬───────────┘          └──────────┬───────────┘        │
-├──────────────┼─────────────────────────────────┼───────────────────┤
-│              │        CONTROLLER LAYER         │                    │
-│              │                                 │                    │
-│   ┌──────────▼───────────┐          ┌──────────▼───────────┐        │
-│   │  AuthController      │          │  DocumentController  │        │
-│   │  FaceController      │          │  AuditController     │        │
-│   └──────────┬───────────┘          └──────────┬───────────┘        │
+│   ┌─────────────────────┐          │
+│   │   GUI (CustomTkinter)│          │
+│   │                      │          │
+│   │  14 Pages            │          │
+│   │  8 Components        │          │
+│   │  ThemeManager        │          │
+│   │  Animations          │          │
+│   └──────────┬───────────┘          │
+├──────────────┼──────────────────────┼───────────────────┤
+│              │   CONTROLLER LAYER   │                    │
+│              │                      │                    │
+│   ┌──────────▼───────────┐  ┌──────▼───────────┐        │
+│   │  AuthController      │  │ DocumentController│        │
+│   │  FaceController      │  │ AuditController   │        │
+│   └──────────┬───────────┘  └──────┬───────────┘        │
 ├──────────────┼─────────────────────────────────┼───────────────────┤
 │              │          SERVICE LAYER          │                    │
 │              │                                 │                    │
@@ -114,7 +114,7 @@ and infrastructure. The system is designed around these principles:
 
 | Layer | Components | Responsibility |
 |-------|-----------|----------------|
-| **Presentation** | 14 GUI pages, 8 UI components, CLI module | User interaction, input validation display, navigation |
+| **Presentation** | 14 GUI pages, 8 UI components | User interaction, input validation display, navigation |
 | **Controller** | Auth, Document, Audit, Face controllers | Thin facade — translates UI requests into service calls |
 | **Service** | 10 service modules + SessionManager | Business logic, orchestration, validation, encryption workflow |
 | **Data Access** | 4 repository classes + BaseRepository | MongoDB CRUD operations, query building, index management |

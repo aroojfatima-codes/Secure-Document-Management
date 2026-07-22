@@ -11,12 +11,14 @@ from typing import Any
 
 from exceptions.custom_exceptions import (
     AuthenticationError,
+    AuthorizationError,
     SDMSException,
 )
 from logger.logging_config import get_logger
 from models.audit import AuditAction, OperationStatus, ResourceType, SeverityLevel
 from services.audit_service import AuditService
 from services.face_recognition_service import FaceRecognitionService
+from services.session_manager import SessionManager
 
 logger = get_logger(__name__)
 
@@ -34,6 +36,7 @@ class FaceController:
     def __init__(self) -> None:
         self._face_service: FaceRecognitionService = FaceRecognitionService()
         self._audit_service: AuditService = AuditService()
+        self._session_mgr: SessionManager = SessionManager()
 
     def is_available(self) -> bool:
         """Check whether face recognition is available."""
@@ -42,6 +45,10 @@ class FaceController:
     def enroll(self, user_id: str, username: str) -> dict[str, Any]:
         """Enroll a user's face for biometric login."""
         try:
+            session = self._session_mgr.get_current_session()
+            if session.user_id != user_id and session.role != "admin":
+                raise AuthorizationError("You can only enroll your own face.")
+
             result = self._face_service.enroll_face(user_id, username)
 
             if result.get("success"):
@@ -111,6 +118,10 @@ class FaceController:
     def remove_enrollment(self, user_id: str, username: str) -> dict[str, Any]:
         """Remove a user's face enrollment."""
         try:
+            session = self._session_mgr.get_current_session()
+            if session.user_id != user_id and session.role != "admin":
+                raise AuthorizationError("You can only remove your own face enrollment.")
+
             result = self._face_service.remove_enrollment(user_id)
 
             if result.get("success"):
@@ -128,6 +139,9 @@ class FaceController:
 
         except AuthenticationError as exc:
             logger.warning("Remove enrollment denied -- not authenticated.")
+            return {"success": False, "error": str(exc)}
+        except AuthorizationError as exc:
+            logger.warning("Remove enrollment denied -- insufficient permissions.")
             return {"success": False, "error": str(exc)}
         except SDMSException as exc:
             logger.error("Remove enrollment failed: %s", exc)

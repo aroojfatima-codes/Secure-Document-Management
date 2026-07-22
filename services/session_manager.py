@@ -1,7 +1,7 @@
 """Session manager — maintains the currently authenticated user's session.
 
 Only one active session exists at a time.  Higher-level modules
-(controllers, CLI) use this manager to check authentication status
+(controllers) use this manager to check authentication status
 and retrieve the current user's cryptographic keys.
 """
 
@@ -14,6 +14,7 @@ from typing import Any, ClassVar
 from crypto.key_generator import generate_crypto_id
 from exceptions.custom_exceptions import AuthenticationError
 from logger.logging_config import get_logger
+from utilities.permissions import Permission
 
 logger = get_logger(__name__)
 
@@ -30,6 +31,8 @@ class Session:
         rsa_public_key:  PEM-encoded RSA public key.
         rsa_private_key: PEM-encoded RSA private key.
         login_timestamp: When the session was created.
+        is_2fa_verified: Whether 2FA has been completed for this session.
+        two_factor_verified_at: When 2FA was verified, if applicable.
     """
 
     session_id: str = ""
@@ -41,6 +44,8 @@ class Session:
     login_timestamp: datetime = field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
+    is_2fa_verified: bool = False
+    two_factor_verified_at: datetime | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return session data as a plain dict (safe for logging)."""
@@ -178,3 +183,42 @@ class SessionManager:
                 f"'{session.role}' is not authorised for this "
                 f"operation. Required: {roles}."
             )
+
+    def require_permission(self, permission: Permission) -> None:
+        """Check that the current user holds *permission*.
+
+        Uses the centralized RBAC definitions from
+        :mod:`utilities.permissions`.
+
+        Args:
+            permission: The required :class:`~utilities.permissions.Permission`.
+
+        Raises:
+            AuthenticationError: If no session exists.
+            AuthorizationError: If the user's role lacks the permission.
+        """
+        from utilities.permissions import require_permission as _check
+
+        session = self.get_current_session()
+        _check(session.role, permission)
+
+    def require_any_permission(self, *permissions: Permission) -> None:
+        """Check that the current user holds at least one permission."""
+        from exceptions.custom_exceptions import AuthorizationError
+        from utilities.permissions import has_any_permission
+
+        session = self.get_current_session()
+        if not has_any_permission(session.role, *permissions):
+            perm_names = ", ".join(p.value for p in permissions)
+            raise AuthorizationError(
+                f"User '{session.username}' with role '{session.role}' "
+                f"does not have any of the required permissions: "
+                f"[{perm_names}]."
+            )
+
+    def get_current_role(self) -> str:
+        """Return the role of the current session user, or empty string."""
+        try:
+            return self.get_current_session().role
+        except Exception:
+            return ""

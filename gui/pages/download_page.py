@@ -133,9 +133,15 @@ class DownloadPage(ctk.CTkFrame):
         if not sel:
             Toast(self, "Select a file to download", "warning")
             return
+        doc_id = sel.get("document_id", "")
+        if not doc_id:
+            Toast(self, "Invalid document selected", "error")
+            return
         self._progress_frame.grid()
         self._post_frame.grid_remove()
         self._progress_bar.set_progress(0)
+        self._selected_doc_id = doc_id
+        self._selected_doc_name = sel.get("original_filename", "file")
         self._animate()
 
     def _animate(self, step=0):
@@ -146,8 +152,27 @@ class DownloadPage(ctk.CTkFrame):
         else:
             self._progress_label.configure(text="Download complete!")
             self._progress_frame.grid_remove()
-            Toast(self, "File downloaded and decrypted successfully!", "success")
+            self._perform_download()
             self._post_frame.grid()
+
+    def _perform_download(self):
+        if hasattr(self, '_app') and self._app and hasattr(self._app, 'controller') and self._app.controller:
+            try:
+                output_dir = os.path.join(os.getcwd(), "storage", "temp")
+                os.makedirs(output_dir, exist_ok=True)
+                result = self._app.controller["document"].download(
+                    self._selected_doc_id, output_dir
+                )
+                if result and result.get("success"):
+                    Toast(self, f"File saved to: {result.get('output_path', output_dir)}", "success")
+                    self._last_download_path = result.get("output_path", output_dir)
+                else:
+                    error_msg = result.get("error", "Download failed") if result else "Download failed"
+                    Toast(self, error_msg, "error")
+            except Exception as e:
+                Toast(self, f"Download failed: {e}", "error")
+        else:
+            Toast(self, f"Download of '{self._selected_doc_name}' queued (no backend).", "info")
 
     def _download_another(self):
         self._post_frame.grid_remove()

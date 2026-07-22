@@ -108,6 +108,8 @@ class UserRepository(BaseRepository):
         Raises:
             UserNotFoundError: If no user with that ``user_id`` exists.
         """
+        from datetime import datetime, timezone
+        updates["updated_at"] = datetime.now(timezone.utc)
         result = self.update(user_id, updates)
         if result is None:
             raise UserNotFoundError(

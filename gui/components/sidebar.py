@@ -263,16 +263,23 @@ class Sidebar(ctk.CTkFrame):
         self.clear()
         self._nav_labels = []
         nav = self._on_navigate
-        is_admin = (user.get("role", "").lower() == "admin")
+        role = user.get("role", "").lower()
 
         self.add_label("Overview")
         self.add_item("\u2302", "Dashboard", lambda: nav("dashboard") if nav else None)
-        self.add_item("\u2B06", "Upload", lambda: nav("upload") if nav else None)
+
+        if role in ("admin", "editor"):
+            self.add_item("\u2B06", "Upload", lambda: nav("upload") if nav else None)
+
         self.add_item("\u25A3", "Documents", lambda: nav("documents") if nav else None)
         self.add_item("\u26B2", "Search", lambda: nav("search") if nav else None)
-        self.add_item("\u267B", "Shared With Me", lambda: nav("shared") if nav else None)
 
-        if is_admin:
+        if role in ("admin", "editor"):
+            self.add_item("\uD83D\uDD17", "Share Documents", lambda: nav("share") if nav else None)
+
+        self.add_item("\u267B", "Shared Documents", lambda: nav("shared") if nav else None)
+
+        if role == "admin":
             self.add_separator()
             self.add_label("Administration")
             self.add_item("\u2611", "Audit Logs", lambda: nav("audit") if nav else None)
@@ -280,7 +287,10 @@ class Sidebar(ctk.CTkFrame):
         self.add_separator()
         self.add_label("Account")
         self.add_item("\uD83D\uDCF7", "Face Recognition", lambda: nav("face") if nav else None)
-        self.add_item("\u2699", "Settings", lambda: nav("settings") if nav else None)
+
+        if role == "admin":
+            self.add_item("\u2699", "Settings", lambda: nav("settings") if nav else None)
+
         self.add_item("\uD83D\uDC64", "Profile", lambda: nav("profile") if nav else None)
 
         logout_item = SidebarItem(

@@ -29,7 +29,7 @@
 
 | Aspect | Detail |
 |--------|--------|
-| **Purpose** | Application entry point orchestrating startup and shutdown. Initialises logging, connects to MongoDB, creates indexes, ensures storage directories, and launches either the GUI or CLI. |
+| **Purpose** | Application entry point orchestrating startup and shutdown. Initialises logging, connects to MongoDB, creates indexes, ensures storage directories, and launches the GUI. |
 | **Syntax** | `main() -> None` |
 | **Parameters** | None |
 | **Returns** | `None` |
@@ -43,15 +43,13 @@
 4. If connection fails, log the error and exit with code 1.
 5. Call `create_indexes()` to ensure all MongoDB indexes exist.
 6. Create a `StorageManager` and call `initialise()` to create storage directories.
-7. If `--cli` flag is in `sys.argv`, import and run the CLI (`display_welcome()` + `run_cli()`).
-8. Otherwise, instantiate all four controllers (`AuthController`, `DocumentController`, `AuditController`, `FaceController`), create `SDMSApp`, and call `mainloop()`.
-9. On exit, disconnect from MongoDB and log shutdown.
+7. Instantiate all four controllers (`AuthController`, `DocumentController`, `AuditController`, `FaceController`), create `SDMSApp`, and call `mainloop()`.
+8. On exit, disconnect from MongoDB and log shutdown.
 
 #### Example
 
 ```bash
-python main.py          # Launch GUI
-python main.py --cli    # Launch CLI
+python main.py
 ```
 
 ---

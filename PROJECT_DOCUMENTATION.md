@@ -24,16 +24,15 @@
    - 9.3 [Pages](#93-pages)
    - 9.4 [Animations](#94-animations)
    - 9.5 [Assets](#95-assets)
-10. [CLI Reference](#10-cli-reference)
-11. [Testing](#11-testing)
-12. [Security Model](#12-security-model)
-13. [Data Flow](#13-data-flow)
+10. [Testing](#11-testing)
+11. [Security Model](#12-security-model)
+12. [Data Flow](#13-data-flow)
 
 ---
 
 ## 1. Project Overview
 
-SDMS is a full-stack document management system implementing **hybrid encryption** (AES-256-CBC + RSA-2048) for at-rest document protection, **face recognition** for biometric authentication, **role-based access control** (RBAC), and a complete **audit trail**. The system provides both a GUI (CustomTkinter) and an interactive CLI.
+SDMS is a full-stack document management system implementing **hybrid encryption** (AES-256-CBC + RSA-2048) for at-rest document protection, **face recognition** for biometric authentication, **role-based access control** (RBAC), and a complete **audit trail**. The system provides a modern GUI built with CustomTkinter.
 
 **Key Features:**
 
@@ -43,7 +42,6 @@ SDMS is a full-stack document management system implementing **hybrid encryption
 - Role-based access control (admin/user/viewer)
 - MongoDB persistence with repository pattern
 - Dark/light theme GUI with 14 page screens
-- Interactive menu-driven CLI
 - Comprehensive audit logging
 
 ---
@@ -55,10 +53,10 @@ The project follows a **layered architecture** with clear separation of concerns
 ```
 ┌─────────────────────────────────────────────────┐
 │                  Entry Points                    │
-│            main.py  │  cli/main.py              │
+│                   main.py                       │
 ├─────────────────────────────────────────────────┤
 │            Presentation Layer                    │
-│     gui/ (CustomTkinter)  │  cli/ (menus)       │
+│     gui/ (CustomTkinter)                        │
 ├─────────────────────────────────────────────────┤
 │           Coordination Layer                     │
 │         controllers/ (thin wrappers)            │
@@ -82,8 +80,6 @@ Controllers are thin coordinators that delegate business logic to services and l
 ```
 Secure-Document-Management/
 ├── main.py                          # Application entry point (56 lines)
-├── cli/
-│   └── main.py                      # Interactive CLI (632 lines)
 ├── config/
 │   └── settings.py                  # Environment-based config (60 lines)
 ├── controllers/                     # Presentation coordination
@@ -231,11 +227,8 @@ copy .env.example .env         # Windows
 ### Running
 
 ```bash
-# Launch GUI (default)
+# Launch GUI
 python main.py
-
-# Launch CLI
-python main.py --cli
 
 # Run tests
 pytest tests/ -v
@@ -249,7 +242,7 @@ Configuration is loaded from environment variables via `.env` file:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `APP_MODE` | `gui` | Entry mode: `gui` or `cli` |
+| `APP_MODE` | `gui` | Entry mode: `gui` |
 | `MONGO_URI` | `mongodb://localhost:27017` | MongoDB connection string |
 | `MONGO_DB_NAME` | `sdms_db` | Database name |
 | `STORAGE_DIR` | `storage/encrypted_documents` | Encrypted file storage |
@@ -268,18 +261,12 @@ The root entry point that:
 2. Loads settings from `.env` via `config.settings`
 3. Connects to MongoDB via `database.manager`
 4. Creates storage directories
-5. Parses CLI arguments (`--cli` flag)
-6. Launches either `gui.app.App` or `cli.main` interactive menu
+5. Launches the GUI (`gui.app.SDMSApp`)
+6. Disconnects from MongoDB and exits cleanly
 
-### `cli/main.py` (632 lines)
+### `gui/app.py`
 
-An interactive menu-driven CLI providing:
-- User registration and login (password or face)
-- Document upload with automatic encryption
-- Document listing and search
-- Secure document download and decryption
-- Document sharing
-- Admin audit log viewing
+The main CustomTkinter application window managing navigation, pages, sidebar, topbar, and controllers.
 
 ---
 
@@ -560,29 +547,6 @@ All 14 page screens in `gui/pages/`:
 - `FILE_ICONS`: file extension to icon mapping
 
 No external font or image dependencies required.
-
----
-
-## 10. CLI Reference
-
-**`cli/main.py`** provides an interactive text-based menu:
-
-```
-=== Secure Document Management System ===
-1.  Register
-2.  Login (Password)
-3.  Login (Face Recognition)
-4.  Upload Document
-5.  List My Documents
-6.  Search Documents
-7.  Download Document
-8.  Share Document
-9.  View Shared Documents
-10. View Audit Logs (Admin)
-0.  Logout / Exit
-```
-
-Each option delegates to the appropriate controller, displaying results in formatted text output.
 
 ---
 

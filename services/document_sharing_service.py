@@ -104,7 +104,14 @@ class DocumentSharingService:
                 f"Document '{document_id}' not found."
             )
 
-        if doc.owner_id != session.user_id:
+        if doc.is_deleted:
+            raise DocumentNotFoundError(
+                f"Document '{document_id}' has been deleted."
+            )
+
+        is_owner = doc.owner_id == session.user_id
+        is_admin = session.role == "admin"
+        if not is_owner and not is_admin:
             raise DocumentNotFoundError(
                 f"Document '{document_id}' not found."
             )
@@ -177,4 +184,74 @@ class DocumentSharingService:
             "recipient_user_id": recipient.user_id,
             "recipient_username": recipient_username,
             "permission": "view",
+        }
+
+    def revoke_share(
+        self, document_id: str, recipient_user_id: str
+    ) -> dict[str, Any]:
+        """Revoke a previously shared document access.
+
+        Only the document owner or an admin may revoke access.
+
+        Args:
+            document_id:       The document identifier.
+            recipient_user_id: The user whose access is being revoked.
+
+        Returns:
+            A dict with revocation metadata.
+
+        Raises:
+            AuthenticationError: If no session is active.
+            DocumentNotFoundError: If the document does not exist or
+                the user is not the owner/admin.
+            ValidationError: If the share entry does not exist.
+        """
+        session = self._session_mgr.get_current_session()
+
+        if not document_id or not document_id.strip():
+            raise ValidationError("Document ID is required.")
+        if not recipient_user_id or not recipient_user_id.strip():
+            raise ValidationError("Recipient user ID is required.")
+
+        doc: Document | None = self._doc_repo.get_by_document_id(
+            document_id
+        )
+        if doc is None:
+            raise DocumentNotFoundError(
+                f"Document '{document_id}' not found."
+            )
+
+        if doc.is_deleted:
+            raise DocumentNotFoundError(
+                f"Document '{document_id}' has been deleted."
+            )
+
+        is_owner = doc.owner_id == session.user_id
+        is_admin = session.role == "admin"
+        if not is_owner and not is_admin:
+            raise DocumentNotFoundError(
+                f"Document '{document_id}' not found."
+            )
+
+        removed = doc.remove_share(recipient_user_id.strip())
+        if not removed:
+            raise ValidationError(
+                f"User '{recipient_user_id}' does not have shared access "
+                f"to document '{document_id}'."
+            )
+
+        self._doc_repo.update_document(
+            document_id,
+            {"shared_with": [sw.to_dict() for sw in doc.shared_with]},
+        )
+
+        logger.info(
+            "Revoked share for document '%s' — user '%s'.",
+            document_id,
+            recipient_user_id,
+        )
+
+        return {
+            "document_id": doc.document_id,
+            "recipient_user_id": recipient_user_id.strip(),
         }

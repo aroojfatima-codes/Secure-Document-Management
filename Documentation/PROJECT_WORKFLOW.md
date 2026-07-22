@@ -46,31 +46,29 @@ flowchart TD
     M --> O[storage/temp/]
     M --> P[logs/]
 
-    N --> Q{--cli flag?}
+    N --> Q[Instantiate 4 controllers]
     O --> Q
     P --> Q
 
-    Q -->|Yes| R[CLI: display_welcome + run_cli]
-    Q -->|No| S[Instantiate 4 controllers]
-    S --> T[AuthController]
-    S --> U[DocumentController]
-    S --> V[AuditController]
-    S --> W[FaceController]
+    Q --> R[AuthController]
+    Q --> S[DocumentController]
+    Q --> T[AuditController]
+    Q --> U[FaceController]
 
-    T --> X[SDMSApp.__init__]
-    U --> X
-    V --> X
-    W --> X
+    R --> V[SDMSApp.__init__]
+    S --> V
+    T --> V
+    U --> V
 
-    X --> Y[Create Sidebar - unauth menu]
-    Y --> Z[Create TopBar]
-    Z --> AA[Show LoginPage]
-    AA --> AB[app.mainloop]
+    V --> W[Create Sidebar - unauth menu]
+    W --> X[Create TopBar]
+    X --> Y[Show LoginPage]
+    Y --> Z[app.mainloop]
 
     style A fill:#e1f5fe
     style G fill:#ffebee
     style H fill:#ffebee
-    style AB fill:#e8f5e9
+    style Z fill:#e8f5e9
 ```
 
 ### Layer-by-Layer Detail

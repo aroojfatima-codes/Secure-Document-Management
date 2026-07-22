@@ -1,23 +1,56 @@
 """Upload page with drag-drop zone, file selector, and progress."""
 
 from __future__ import annotations
+
+import mimetypes
 import os
+
 import customtkinter as ctk
 from tkinter import filedialog
-from gui.theme import ThemeManager, Dim, Fonts
-from gui.components.forms import StyledButton, StyledEntry, StyledComboBox, StyledText
-from gui.components.loading import AnimatedProgressBar
+
 from gui.components.dialogs import Toast
+from gui.components.forms import (
+    StyledButton,
+    StyledComboBox,
+    StyledEntry,
+    StyledText,
+)
+from gui.components.loading import AnimatedProgressBar
 from gui.smooth_scrolling import bind_smooth_scroll
+from gui.theme import ThemeManager, Dim, Fonts
+
+try:
+    from tkinterdnd2 import DND_FILES
+
+    _DND_AVAILABLE = True
+except ImportError:
+    _DND_AVAILABLE = False
 
 tm = ThemeManager()
 C = tm.C
 
-MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
+MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
 ALLOWED_EXTENSIONS = {
     ".pdf", ".docx", ".doc", ".txt", ".csv", ".xlsx",
     ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff",
 }
+
+
+def _format_size(size_bytes: int) -> str:
+    if size_bytes < 1024:
+        return f"{size_bytes} B"
+    if size_bytes < 1048576:
+        return f"{size_bytes / 1024:.1f} KB"
+    return f"{size_bytes / 1048576:.1f} MB"
+
+
+def _get_file_type_label(path: str) -> str:
+    ext = os.path.splitext(path)[1].lower()
+    mime, _ = mimetypes.guess_type(path)
+    label = ext.upper().lstrip(".")
+    if mime:
+        label = f"{label} ({mime})"
+    return label
 
 
 class UploadPage(ctk.CTkFrame):
@@ -31,6 +64,7 @@ class UploadPage(ctk.CTkFrame):
         self.grid_rowconfigure(1, weight=1)
         self._build_header()
         self._build_content()
+        self._update_upload_button_state()
 
     def _build_header(self):
         header = ctk.CTkFrame(self, fg_color="transparent")
@@ -53,29 +87,41 @@ class UploadPage(ctk.CTkFrame):
         scroll.grid(row=1, column=0, sticky="nsew", padx=Dim.PAD_XL, pady=Dim.PAD_MD)
         scroll.grid_columnconfigure(0, weight=1)
 
-        drop_zone = ctk.CTkFrame(
+        # ── Drop Zone ──────────────────────────────────────────────
+        self._drop_zone = ctk.CTkFrame(
             scroll, fg_color=C.bg_input, corner_radius=Dim.RADIUS_LG,
             border_width=2, border_color=C.border,
             height=180, cursor="hand2",
         )
-        drop_zone.grid(row=0, column=0, sticky="ew", pady=(0, Dim.PAD_LG))
-        drop_zone.pack_propagate(False)
-        drop_zone.bind("<Button-1>", lambda e: self._browse())
+        self._drop_zone.grid(row=0, column=0, sticky="ew", pady=(0, Dim.PAD_LG))
+        self._drop_zone.pack_propagate(False)
+        self._drop_zone.bind("<Button-1>", lambda e: self._browse())
 
-        ctk.CTkLabel(
-            drop_zone, text="\u2B06\uFE0F", font=(Fonts.F, 32),
-            text_color=C.text_dim,
-        ).pack(pady=(Dim.PAD_LG, Dim.PAD_SM))
+        self._drop_icon = ctk.CTkLabel(
+            self._drop_zone, text="\u2B06\uFE0F", font=(Fonts.F, 32),
+            text_color=C.text_dim, cursor="hand2",
+        )
+        self._drop_icon.pack(pady=(Dim.PAD_LG, Dim.PAD_SM))
+        self._drop_icon.bind("<Button-1>", lambda e: self._browse())
+
         self._drop_label = ctk.CTkLabel(
-            drop_zone, text="Click to browse or drag file here",
-            font=Fonts.BODY, text_color=C.text_secondary,
+            self._drop_zone, text="Click to browse or drag file here",
+            font=Fonts.BODY, text_color=C.text_secondary, cursor="hand2",
         )
         self._drop_label.pack()
-        ctk.CTkLabel(
-            drop_zone, text="Supports PDF, DOCX, TXT, images, and more (Max 50MB)",
-            font=Fonts.TINY, text_color=C.text_dim,
-        ).pack(pady=(2, 0))
+        self._drop_label.bind("<Button-1>", lambda e: self._browse())
 
+        self._drop_hint = ctk.CTkLabel(
+            self._drop_zone,
+            text="Supports PDF, DOCX, TXT, images, and more (Max 50MB)",
+            font=Fonts.TINY, text_color=C.text_dim, cursor="hand2",
+        )
+        self._drop_hint.pack(pady=(2, 0))
+        self._drop_hint.bind("<Button-1>", lambda e: self._browse())
+
+        self._setup_drag_drop()
+
+        # ── File Details ───────────────────────────────────────────
         info_frame = ctk.CTkFrame(scroll, fg_color=C.bg_card, corner_radius=Dim.RADIUS_LG)
         info_frame.grid(row=1, column=0, sticky="ew", pady=(0, Dim.PAD_LG))
         info_frame.grid_columnconfigure(1, weight=1)
@@ -93,27 +139,35 @@ class UploadPage(ctk.CTkFrame):
         self._filename_label.grid(row=1, column=0, columnspan=2,
                                   sticky="w", padx=Dim.PAD_LG)
 
+        self._filetype_label = ctk.CTkLabel(
+            info_frame, text="", font=Fonts.TINY,
+            text_color=C.text_dim, anchor="w",
+        )
+        self._filetype_label.grid(row=2, column=0, columnspan=2,
+                                  sticky="w", padx=Dim.PAD_LG, pady=(0, Dim.PAD_SM))
+
         ctk.CTkLabel(
             info_frame, text="Title:", font=Fonts.BODY, text_color=C.text_secondary,
-        ).grid(row=2, column=0, sticky="w", padx=Dim.PAD_LG, pady=Dim.PAD_SM)
+        ).grid(row=3, column=0, sticky="w", padx=Dim.PAD_LG, pady=Dim.PAD_SM)
         self._title = StyledEntry(info_frame)
-        self._title.grid(row=2, column=1, sticky="ew", padx=Dim.PAD_SM, pady=Dim.PAD_SM)
+        self._title.grid(row=3, column=1, sticky="ew", padx=Dim.PAD_SM, pady=Dim.PAD_SM)
 
         ctk.CTkLabel(
             info_frame, text="Category:", font=Fonts.BODY, text_color=C.text_secondary,
-        ).grid(row=3, column=0, sticky="w", padx=Dim.PAD_LG, pady=Dim.PAD_SM)
+        ).grid(row=4, column=0, sticky="w", padx=Dim.PAD_LG, pady=Dim.PAD_SM)
         self._category = StyledComboBox(
             info_frame, values=["General", "Finance", "Legal", "HR", "Technical"],
         )
-        self._category.grid(row=3, column=1, sticky="ew", padx=Dim.PAD_SM, pady=Dim.PAD_SM)
+        self._category.grid(row=4, column=1, sticky="ew", padx=Dim.PAD_SM, pady=Dim.PAD_SM)
 
         ctk.CTkLabel(
             info_frame, text="Description:", font=Fonts.BODY,
             text_color=C.text_secondary,
-        ).grid(row=4, column=0, sticky="nw", padx=Dim.PAD_LG, pady=Dim.PAD_SM)
+        ).grid(row=5, column=0, sticky="nw", padx=Dim.PAD_LG, pady=Dim.PAD_SM)
         self._description = StyledText(info_frame, height=60)
-        self._description.grid(row=4, column=1, sticky="ew", padx=Dim.PAD_SM, pady=Dim.PAD_SM)
+        self._description.grid(row=5, column=1, sticky="ew", padx=Dim.PAD_SM, pady=Dim.PAD_SM)
 
+        # ── Progress ───────────────────────────────────────────────
         self._progress_frame = ctk.CTkFrame(scroll, fg_color=C.bg_card, corner_radius=Dim.RADIUS_LG)
         self._progress_frame.grid(row=2, column=0, sticky="ew", pady=(0, Dim.PAD_LG))
         self._progress_frame.grid_columnconfigure(0, weight=1)
@@ -129,6 +183,7 @@ class UploadPage(ctk.CTkFrame):
         self._progress_bar.grid(row=1, column=0, sticky="ew",
                                 padx=Dim.PAD_LG, pady=(0, Dim.PAD_MD))
 
+        # ── Success ────────────────────────────────────────────────
         self._success_frame = ctk.CTkFrame(scroll, fg_color=C.bg_card, corner_radius=Dim.RADIUS_LG)
         self._success_frame.grid(row=3, column=0, sticky="ew", pady=(0, Dim.PAD_LG))
         self._success_frame.grid_columnconfigure(0, weight=1)
@@ -163,12 +218,14 @@ class UploadPage(ctk.CTkFrame):
             command=self._go_to_documents, width=140,
         ).pack(side="left")
 
+        # ── Action Buttons ─────────────────────────────────────────
         btn_frame = ctk.CTkFrame(scroll, fg_color="transparent")
         btn_frame.grid(row=4, column=0, sticky="ew")
-        StyledButton(
+        self._upload_btn = StyledButton(
             btn_frame, text="Upload & Encrypt", icon="\u2B06\uFE0F",
             command=self._do_upload, width=160,
-        ).pack(side="left", padx=(0, Dim.PAD_SM))
+        )
+        self._upload_btn.pack(side="left", padx=(0, Dim.PAD_SM))
         StyledButton(
             btn_frame, text="Clear", variant="outline",
             command=self._clear, width=100,
@@ -176,34 +233,88 @@ class UploadPage(ctk.CTkFrame):
 
         bind_smooth_scroll(scroll)
 
+    # ── Drag & Drop ────────────────────────────────────────────────
+    def _setup_drag_drop(self):
+        if not _DND_AVAILABLE:
+            return
+        try:
+            self._drop_zone.drop_target_register(DND_FILES)
+            self._drop_zone.dnd_bind("<<Drop>>", self._on_drop)
+        except Exception:
+            pass
+
+    def _on_drop(self, event):
+        data = event.data
+        if not data:
+            return
+        paths = self._parse_dnd_data(data)
+        if paths:
+            self._process_selected_file(paths[0])
+
+    @staticmethod
+    def _parse_dnd_data(data: str) -> list[str]:
+        paths = []
+        if "{" in data:
+            import re
+            paths = re.findall(r"\{([^}]+)\}", data)
+        if not paths:
+            paths = [p for p in data.split() if os.path.exists(p)]
+        return paths
+
+    # ── File Selection ─────────────────────────────────────────────
     def _browse(self):
         try:
             path = filedialog.askopenfilename(
                 title="Select File",
                 filetypes=[
-                    ("All Supported", "*.pdf *.docx *.doc *.txt *.csv *.xlsx *.png *.jpg *.jpeg"),
+                    ("All Supported", "*.pdf *.docx *.doc *.txt *.csv *.xlsx *.png *.jpg *.jpeg *.gif *.bmp *.tiff"),
                     ("PDF", "*.pdf"), ("Word", "*.docx *.doc"), ("Text", "*.txt"),
-                    ("Images", "*.png *.jpg *.jpeg"), ("All files", "*.*"),
+                    ("Spreadsheet", "*.csv *.xlsx"),
+                    ("Images", "*.png *.jpg *.jpeg *.gif *.bmp *.tiff"),
+                    ("All files", "*.*"),
                 ],
             )
-            if path:
-                ext = os.path.splitext(path)[1].lower()
-                if ext not in ALLOWED_EXTENSIONS:
-                    Toast(self, f"File type '{ext}' is not allowed", "error")
-                    return
-                size = os.path.getsize(path)
-                if size > MAX_FILE_SIZE:
-                    Toast(self, f"File too large ({size / 1048576:.1f}MB). Max 50MB.", "error")
-                    return
-                self._selected_path = path
-                fname = os.path.basename(path)
-                size_str = f"{size / 1024:.1f} KB" if size < 1048576 else f"{size / 1048576:.1f} MB"
-                self._filename_label.configure(
-                    text=f"{fname} ({size_str})", text_color=C.text_primary)
-                self._title.set_value(fname.rsplit(".", 1)[0])
+            if not path:
+                return
+            self._process_selected_file(path)
         except Exception as e:
             Toast(self, f"Error selecting file: {e}", "error")
 
+    def _process_selected_file(self, path: str):
+        try:
+            ext = os.path.splitext(path)[1].lower()
+            if ext not in ALLOWED_EXTENSIONS:
+                Toast(self, f"File type '{ext}' is not allowed", "error")
+                return
+            size = os.path.getsize(path)
+            if size > MAX_FILE_SIZE:
+                Toast(self, f"File too large ({_format_size(size)}). Max 50MB.", "error")
+                return
+        except OSError as e:
+            Toast(self, f"Cannot read file: {e}", "error")
+            return
+
+        self._selected_path = path
+        fname = os.path.basename(path)
+        type_label = _get_file_type_label(path)
+
+        self._filename_label.configure(
+            text=f"{fname}  —  {_format_size(size)}",
+            text_color=C.text_primary,
+        )
+        self._filetype_label.configure(text=type_label)
+        self._title.set_value(fname.rsplit(".", 1)[0])
+        self._update_upload_button_state()
+
+    # ── Upload Button State ────────────────────────────────────────
+    def _update_upload_button_state(self):
+        state = "normal" if self._selected_path else "disabled"
+        try:
+            self._upload_btn.configure(state=state)
+        except Exception:
+            pass
+
+    # ── Upload ─────────────────────────────────────────────────────
     def _do_upload(self):
         if not self._selected_path:
             Toast(self, "Please select a file first", "warning")
@@ -221,7 +332,7 @@ class UploadPage(ctk.CTkFrame):
         else:
             self._progress_label.configure(text="Encrypting and saving...")
             self._progress_frame.update_idletasks()
-            if hasattr(self, '_app') and self._app and self._app.controller:
+            if hasattr(self, "_app") and self._app and self._app.controller:
                 try:
                     ctrl = self._app.controller
                     result = ctrl["document"].upload(self._selected_path)
@@ -250,7 +361,7 @@ class UploadPage(ctk.CTkFrame):
         self._success_frame.grid()
 
     def _go_to_documents(self):
-        if hasattr(self, '_app') and self._app:
+        if hasattr(self, "_app") and self._app:
             try:
                 self._app._navigate("documents")
             except Exception:
@@ -259,10 +370,12 @@ class UploadPage(ctk.CTkFrame):
     def _clear(self):
         self._selected_path = ""
         self._filename_label.configure(text="No file selected", text_color=C.text_dim)
+        self._filetype_label.configure(text="")
         self._title.clear()
         self._description.clear()
         self._progress_frame.grid_remove()
         self._success_frame.grid_remove()
+        self._update_upload_button_state()
 
     def set_upload_result(self, doc_id: str):
         self._last_upload_doc_id = doc_id

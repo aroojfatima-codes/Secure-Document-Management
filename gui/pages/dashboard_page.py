@@ -12,10 +12,14 @@ C = tm.C
 
 
 class DashboardPage(ctk.CTkFrame):
-    def __init__(self, master, user: dict | None = None, **kw):
+    def __init__(self, master, user: dict | None = None, on_navigate=None, **kw):
         kw.pop("fg_color", None)
         super().__init__(master, fg_color=C.bg_main, **kw)
         self._user = user or {}
+        self._role = self._user.get("role", "viewer").lower()
+        self._can_upload = self._role in ("admin", "editor")
+        self._can_share = self._role in ("admin", "editor")
+        self._on_navigate = on_navigate
 
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
@@ -118,16 +122,19 @@ class DashboardPage(ctk.CTkFrame):
             text_color=C.text_primary,
         ).pack(anchor="w", padx=Dim.PAD_MD, pady=(Dim.PAD_MD, 0))
 
-        actions_data = [
-            ("\u2B06", "Upload Document", "Encrypt & store files", C.primary),
-            ("\u25A3", "View Documents", "Browse your library", C.info),
-            ("\uD83D\uDD17", "Share Files", "Share with team members", C.success),
-            ("\uD83D\uDD0D", "Search", "Find documents quickly", C.warning),
-        ]
-        for icon, title, desc, color in actions_data:
+        actions_data = []
+        if self._can_upload:
+            actions_data.append(("\u2B06", "Upload Document", "Encrypt & store files", C.primary, "upload"))
+        actions_data.append(("\u25A3", "View Documents", "Browse your library", C.info, "documents"))
+        actions_data.append(("\uD83D\uDD0D", "Search", "Find documents quickly", C.warning, "search"))
+        if self._can_share:
+            actions_data.append(("\uD83D\uDD17", "Share Files", "Share with team members", C.success, "share"))
+        for icon, title, desc, color, page_name in actions_data:
+            nav = self._on_navigate
             action = ActionCard(
                 quick_actions_frame, title=title, icon=icon,
                 description=desc, accent=color, height=60,
+                command=lambda p=page_name: nav and nav(p),
             )
             action.pack(fill="x", padx=Dim.PAD_MD, pady=3)
 

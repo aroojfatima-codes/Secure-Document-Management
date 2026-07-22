@@ -111,6 +111,11 @@ class DocumentDownloadService:
                 f"Document '{document_id}' not found."
             )
 
+        if doc.is_deleted:
+            raise DocumentNotFoundError(
+                f"Document '{document_id}' has been deleted."
+            )
+
         encrypted_aes_key_str: str
         if doc.owner_id == session.user_id:
             encrypted_aes_key_str = doc.encrypted_aes_key

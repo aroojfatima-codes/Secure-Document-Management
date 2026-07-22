@@ -2,7 +2,7 @@
 and logout.
 
 This is the thin presentation-coordination layer.  It receives
-input from the CLI, delegates to the service layer, formats results,
+input from the GUI, delegates to the service layer, formats results,
 and handles errors for display.
 """
 

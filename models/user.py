@@ -33,6 +33,10 @@ class User(BaseModel):
         is_active:       Whether the account is enabled.
         face_encoding:   Facial recognition encoding (list of floats) or empty.
         face_enrolled:   Whether the user has enrolled facial biometrics.
+        is_2fa_enabled:  Whether 2FA (Two-Factor Authentication) is enabled for this user.
+        two_factor_secret: Base32-encoded 2FA TOTP secret key, if 2FA is enabled.
+        two_factor_backup_codes: List of backup codes for 2FA recovery, if 2FA is enabled.
+        two_factor_last_verification: Timestamp of last 2FA verification, if 2FA is enabled.
     """
 
     user_id: str = ""
@@ -50,6 +54,14 @@ class User(BaseModel):
     is_active: bool = True
     face_encoding: list[float] = field(default_factory=list)
     face_enrolled: bool = False
+    is_2fa_enabled: bool = False
+    two_factor_secret: str = ""
+    two_factor_backup_codes: list[str] = field(default_factory=list)
+    two_factor_last_verification: datetime = field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
+    two_factor_attempts: int = 0
+    two_factor_lockout_until: datetime | None = None
 
     # ------------------------------------------------------------------
     # BaseModel interface
@@ -69,6 +81,12 @@ class User(BaseModel):
             "is_active": self.is_active,
             "face_encoding": self.face_encoding,
             "face_enrolled": self.face_enrolled,
+            "is_2fa_enabled": self.is_2fa_enabled,
+            "two_factor_secret": self.two_factor_secret,
+            "two_factor_backup_codes": self.two_factor_backup_codes,
+            "two_factor_last_verification": self.two_factor_last_verification,
+            "two_factor_attempts": self.two_factor_attempts,
+            "two_factor_lockout_until": self.two_factor_lockout_until,
         }
 
     def validate(self) -> None:
@@ -87,7 +105,7 @@ class User(BaseModel):
             errors.append("password_hash is required.")
         if self.role not in VALID_ROLES:
             errors.append(
-                f"Invalid role '{self.role}'. "
+                f"Invalid role \'{self.role}\'. "
                 f"Must be one of {sorted(VALID_ROLES)}."
             )
         if not self.created_at:
@@ -107,6 +125,25 @@ class User(BaseModel):
         face_encoding: list[float] = (
             list(raw_encoding) if raw_encoding else []
         )
+        backup_codes: Any = data.get("two_factor_backup_codes", [])
+        backup_codes_list: list[str] = (
+            list(backup_codes) if backup_codes else []
+        )
+
+        try:
+            last_verification = datetime.fromisoformat(
+                data.get("two_factor_last_verification", "")
+            ) if data.get("two_factor_last_verification") else datetime.now(timezone.utc)
+        except (ValueError, TypeError):
+            last_verification = datetime.now(timezone.utc)
+
+        try:
+            lockout_until = datetime.fromisoformat(
+                data.get("two_factor_lockout_until", "")
+            ) if data.get("two_factor_lockout_until") else None
+        except (ValueError, TypeError):
+            lockout_until = None
+
         return cls(
             user_id=data.get("user_id", ""),
             username=data.get("username", ""),
@@ -121,6 +158,12 @@ class User(BaseModel):
             is_active=data.get("is_active", True),
             face_encoding=face_encoding,
             face_enrolled=data.get("face_enrolled", False),
+            is_2fa_enabled=data.get("is_2fa_enabled", False),
+            two_factor_secret=data.get("two_factor_secret", ""),
+            two_factor_backup_codes=backup_codes_list,
+            two_factor_last_verification=last_verification,
+            two_factor_attempts=data.get("two_factor_attempts", 0),
+            two_factor_lockout_until=lockout_until,
         )
 
     # ------------------------------------------------------------------
@@ -130,3 +173,49 @@ class User(BaseModel):
     def touch(self) -> None:
         """Set ``updated_at`` to the current UTC time."""
         self.updated_at = datetime.now(timezone.utc)
+
+    def generate_2fa_secret(self) -> str:
+        """Generate a new 2FA secret key.
+
+        Returns:
+            A base32-encoded 2FA secret key.
+        """
+        import base64
+        import secrets
+
+        secret = secrets.token_bytes(20)
+        return base64.b32encode(secret).decode('utf-8')
+
+    def generate_2fa_backup_codes(self) -> list[str]:
+        """Generate backup codes for 2FA recovery.
+
+        Returns:
+            A list of 10 backup codes (8 characters each).
+        """
+        import secrets
+        import string
+
+        backup_codes = []
+        for _ in range(10):
+            code = ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(8))
+            backup_codes.append(code)
+        return backup_codes
+
+    def enable_2fa(self, secret: str, backup_codes: list[str]) -> None:
+        """Enable 2FA for this user.
+
+        Args:
+            secret: Base32-encoded 2FA TOTP secret key.
+            backup_codes: List of backup codes for 2FA recovery.
+        """
+        self.is_2fa_enabled = True
+        self.two_factor_secret = secret
+        self.two_factor_backup_codes = backup_codes
+        self.two_factor_last_verification = datetime.now(timezone.utc)
+
+    def disable_2fa(self) -> None:
+        """Disable 2FA for this user."""
+        self.is_2fa_enabled = False
+        self.two_factor_secret = ""
+        self.two_factor_backup_codes = []
+        self.two_factor_last_verification = datetime.now(timezone.utc)

@@ -1,14 +1,23 @@
-"""Audit controller -- handles audit log viewing and searching."""
+"""Audit controller -- handles audit log viewing and searching.
+
+RBAC enforcement: only admin users may query audit logs.
+"""
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
 
-from exceptions.custom_exceptions import AuthenticationError, SDMSException
+from exceptions.custom_exceptions import (
+    AuthenticationError,
+    AuthorizationError,
+    SDMSException,
+)
 from logger.logging_config import get_logger
 from models.audit import AuditAction, OperationStatus, ResourceType, SeverityLevel
 from services.audit_service import AuditService
+from services.session_manager import SessionManager
+from utilities.permissions import Permission
 
 logger = get_logger(__name__)
 
@@ -24,6 +33,7 @@ class AuditController:
 
     def __init__(self) -> None:
         self._audit_service: AuditService = AuditService()
+        self._session_mgr: SessionManager = SessionManager()
 
     @staticmethod
     def _parse_date(date_str: str | None) -> tuple[datetime | None, str | None]:
@@ -50,8 +60,12 @@ class AuditController:
         page: int = 1,
         per_page: int = 50,
     ) -> dict[str, Any]:
-        """Query audit logs with optional filters and pagination."""
+        """Query audit logs with optional filters and pagination.
+
+        RBAC: Requires ``view_audit_logs`` permission (admin only).
+        """
         try:
+            self._session_mgr.require_permission(Permission.VIEW_AUDIT_LOGS)
             parsed_from, err = self._parse_date(date_from)
             if err:
                 return {"success": False, "error": err}
@@ -80,6 +94,9 @@ class AuditController:
 
         except AuthenticationError as exc:
             logger.warning("Audit log view denied -- not authenticated.")
+            return {"success": False, "error": str(exc)}
+        except AuthorizationError as exc:
+            logger.warning("Audit log view denied -- insufficient permissions: %s", exc)
             return {"success": False, "error": str(exc)}
         except SDMSException as exc:
             logger.error("Audit log view failed: %s", exc)

@@ -22,7 +22,7 @@ def _file_colors() -> dict[str, str]:
 
 
 class DocumentsPage(ctk.CTkFrame):
-    def __init__(self, master, on_refresh=None, **kw):
+    def __init__(self, master, on_refresh=None, user: dict | None = None, **kw):
         kw.pop("fg_color", None)
         super().__init__(master, fg_color=C.bg_main, **kw)
         self._on_refresh = on_refresh
@@ -30,6 +30,11 @@ class DocumentsPage(ctk.CTkFrame):
         self._all_documents = []
         self._documents = []
         self._app = None
+        self._user = user or {}
+        self._role = self._user.get("role", "viewer").lower()
+        self._can_upload = self._role in ("admin", "editor")
+        self._can_share = self._role in ("admin", "editor")
+        self._can_delete = self._role in ("admin", "editor")
 
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
@@ -171,6 +176,13 @@ class DocumentsPage(ctk.CTkFrame):
 
         actions = ctk.CTkFrame(card, fg_color="transparent", width=80)
         actions.pack(side="right", padx=Dim.PAD_SM)
+        if self._can_share:
+            ctk.CTkButton(
+                actions, text="\uD83D\uDD17", width=28, height=28, font=Fonts.ICON,
+                fg_color=C.bg_input, hover_color=C.success,
+                text_color=C.text_secondary, corner_radius=Dim.RADIUS_SM,
+                command=lambda d=doc: self._on_share(d),
+            ).pack(pady=2)
         ctk.CTkButton(
             actions, text="\u2191", width=28, height=28, font=Fonts.ICON,
             fg_color=C.bg_input, hover_color=C.primary,
@@ -192,7 +204,20 @@ class DocumentsPage(ctk.CTkFrame):
                 pass
 
     def _on_download(self, doc: dict):
-        Toast(self, f"Downloading {doc.get('original_filename', doc.get('filename', 'file'))}...", "info")
+        if hasattr(self, '_app') and self._app:
+            try:
+                self._app._navigate("download")
+            except Exception:
+                Toast(self, f"Downloading {doc.get('original_filename', doc.get('filename', 'file'))}...", "info")
+        else:
+            Toast(self, f"Downloading {doc.get('original_filename', doc.get('filename', 'file'))}...", "info")
+
+    def _on_share(self, doc: dict):
+        if hasattr(self, '_app') and self._app:
+            try:
+                self._app._navigate("share")
+            except Exception:
+                pass
 
     def _on_table_select(self, _=None):
         pass
@@ -214,16 +239,18 @@ class DocumentsPage(ctk.CTkFrame):
             label="Open", command=lambda: self._on_select(doc))
         self._context_menu.add_command(
             label="Download", command=lambda: self._on_download(doc))
-        self._context_menu.add_separator()
-        self._context_menu.add_command(
-            label="Share", command=lambda: self._navigate_to("share"))
-        self._context_menu.add_separator()
-        self._context_menu.add_command(
-            label="Delete",
-            command=lambda: ConfirmDialog(
-                self, f"Delete '{doc.get('original_filename', doc.get('filename', 'file'))}'?",
-                on_yes=lambda: Toast(self, "File deleted", "success"),
-            ))
+        if self._can_share:
+            self._context_menu.add_separator()
+            self._context_menu.add_command(
+                label="Share", command=lambda d=doc: self._on_share(d))
+        if self._can_delete:
+            self._context_menu.add_separator()
+            self._context_menu.add_command(
+                label="Delete",
+                command=lambda: ConfirmDialog(
+                    self, f"Delete '{doc.get('original_filename', doc.get('filename', 'file'))}'?",
+                    on_yes=lambda d=doc: self._do_delete(d),
+                ))
         try:
             self._context_menu.tk_popup(event.x_root, event.y_root)
         except Exception:
@@ -245,6 +272,22 @@ class DocumentsPage(ctk.CTkFrame):
         filtered = [d for d in self._all_documents if q in d.get("original_filename", d.get("filename", "")).lower() or q in d.get("document_id", "").lower()]
         self._documents = filtered
         self._render_documents()
+
+    def _do_delete(self, doc: dict):
+        if hasattr(self, '_app') and self._app and hasattr(self._app, 'controller') and self._app.controller:
+            try:
+                result = self._app.controller["document"].delete_document(doc.get("document_id", ""))
+                if result and result.get("success"):
+                    Toast(self, "File deleted successfully", "success")
+                    if self._on_refresh:
+                        self._on_refresh()
+                else:
+                    error_msg = result.get("error", "Delete failed") if result else "Delete failed"
+                    Toast(self, error_msg, "error")
+            except Exception as e:
+                Toast(self, f"Delete failed: {e}", "error")
+        else:
+            Toast(self, "Delete unavailable — no backend connected", "error")
 
     def apply_theme(self):
         self.configure(fg_color=C.bg_main)

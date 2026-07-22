@@ -3,6 +3,11 @@
 This is the thin presentation-coordination layer.  It validates
 authentication, delegates to the service layer, formats results,
 and handles errors for display.
+
+RBAC enforcement: every public method checks the current session
+role against the centralized permission definitions before
+proceeding.  This prevents unauthorised operations even if the GUI
+is bypassed.
 """
 
 from __future__ import annotations
@@ -10,9 +15,12 @@ from __future__ import annotations
 from typing import Any
 
 from database.exceptions import DocumentNotFoundError, UserNotFoundError
+from database.repositories.document_repository import DocumentRepository
+from database.repositories.user_repository import UserRepository
 from crypto.exceptions import IntegrityCheckError
 from exceptions.custom_exceptions import (
     AuthenticationError,
+    AuthorizationError,
     FileHandlingError,
     SDMSException,
     ValidationError,
@@ -24,6 +32,8 @@ from services.document_download_service import DocumentDownloadService
 from services.document_listing_service import DocumentListingService
 from services.document_service import DocumentUploadService
 from services.document_sharing_service import DocumentSharingService
+from services.session_manager import SessionManager
+from utilities.permissions import Permission
 
 logger = get_logger(__name__)
 
@@ -46,6 +56,8 @@ class DocumentController:
         self._download_service: DocumentDownloadService = DocumentDownloadService()
         self._sharing_service: DocumentSharingService = DocumentSharingService()
         self._audit_service: AuditService = AuditService()
+        self._session_mgr: SessionManager = SessionManager()
+        self._doc_repo = DocumentRepository()
 
     def _safe_call(
         self, fn: Any, default: dict[str, Any] | None = None,
@@ -81,6 +93,8 @@ class DocumentController:
     def upload(self, file_path: str) -> dict[str, Any]:
         """Upload, encrypt, and persist a document.
 
+        RBAC: Requires ``upload_document`` permission (admin, editor).
+
         Args:
             file_path: Path to the file on the local filesystem.
 
@@ -96,6 +110,7 @@ class DocumentController:
                 }
         """
         try:
+            self._session_mgr.require_permission(Permission.UPLOAD_DOCUMENT)
             result = self._upload_service.upload(file_path)
             self._audit_service.log_event(
                 action=AuditAction.DOCUMENT_UPLOAD.value,
@@ -121,6 +136,9 @@ class DocumentController:
             }
         except AuthenticationError as exc:
             logger.warning("Upload denied — not authenticated.")
+            return {"success": False, "error": str(exc)}
+        except AuthorizationError as exc:
+            logger.warning("Upload denied — insufficient permissions: %s", exc)
             return {"success": False, "error": str(exc)}
         except ValidationError as exc:
             logger.warning("Upload validation failed: %s", exc)
@@ -196,6 +214,8 @@ class DocumentController:
     def download(self, document_id: str, output_dir: str) -> dict[str, Any]:
         """Download, decrypt, verify integrity, and save a document.
 
+        RBAC: Requires ``download_document`` permission (all roles).
+
         Args:
             document_id: The UUID4 hex document identifier.
             output_dir:  Directory path for the restored file.
@@ -214,6 +234,7 @@ class DocumentController:
                 }
         """
         try:
+            self._session_mgr.require_permission(Permission.DOWNLOAD_DOCUMENT)
             result = self._download_service.download(
                 document_id=document_id, output_dir=output_dir
             )
@@ -244,6 +265,9 @@ class DocumentController:
             }
         except AuthenticationError as exc:
             logger.warning("Download denied — not authenticated.")
+            return {"success": False, "error": str(exc)}
+        except AuthorizationError as exc:
+            logger.warning("Download denied — insufficient permissions: %s", exc)
             return {"success": False, "error": str(exc)}
         except ValidationError as exc:
             logger.warning("Download validation failed: %s", exc)
@@ -302,6 +326,7 @@ class DocumentController:
                 }
         """
         try:
+            self._session_mgr.require_permission(Permission.SHARE_DOCUMENT)
             result = self._sharing_service.share_document(
                 document_id=document_id,
                 recipient_username=recipient_username,
@@ -333,6 +358,9 @@ class DocumentController:
         except AuthenticationError as exc:
             logger.warning("Share denied — not authenticated.")
             return {"success": False, "error": str(exc)}
+        except AuthorizationError as exc:
+            logger.warning("Share denied — insufficient permissions: %s", exc)
+            return {"success": False, "error": str(exc)}
         except ValidationError as exc:
             logger.warning("Share validation failed: %s", exc)
             self._log_share_failure(document_id, recipient_username, str(exc))
@@ -344,3 +372,147 @@ class DocumentController:
         except SDMSException as exc:
             logger.error("Share failed: %s", exc)
             return {"success": False, "error": f"Share failed: {exc}"}
+
+    # ------------------------------------------------------------------
+    # Revoke Share
+    # ------------------------------------------------------------------
+
+    def revoke_share(
+        self, document_id: str, recipient_user_id: str
+    ) -> dict[str, Any]:
+        """Revoke a previously granted share.
+
+        RBAC: Only the document owner or an admin may revoke.
+
+        Args:
+            document_id:       The document identifier.
+            recipient_user_id: The user whose access is being revoked.
+
+        Returns:
+            A dict with the revocation result.
+        """
+        try:
+            result = self._sharing_service.revoke_share(
+                document_id=document_id,
+                recipient_user_id=recipient_user_id,
+            )
+            self._audit_service.log_event(
+                action=AuditAction.DOCUMENT_SHARE.value,
+                resource_type=ResourceType.SHARING.value,
+                resource_id=result["document_id"],
+                resource_name=result["recipient_user_id"],
+                status=OperationStatus.SUCCESS.value,
+                message=(
+                    f"Share revoked for document '{result['document_id']}' "
+                    f"— user '{result['recipient_user_id']}'."
+                ),
+                severity=SeverityLevel.INFO.value,
+                metadata={
+                    "recipient_user_id": result.get("recipient_user_id", ""),
+                    "operation": "revoke",
+                },
+            )
+            return {
+                "success": True,
+                **result,
+                "message": (
+                    f"Access revoked for user "
+                    f"'{result['recipient_user_id']}'."
+                ),
+            }
+        except AuthenticationError as exc:
+            logger.warning("Revoke denied — not authenticated.")
+            return {"success": False, "error": str(exc)}
+        except ValidationError as exc:
+            logger.warning("Revoke validation failed: %s", exc)
+            return {"success": False, "error": str(exc)}
+        except (DocumentNotFoundError, UserNotFoundError) as exc:
+            logger.warning("Revoke failed: %s", exc)
+            return {"success": False, "error": str(exc)}
+        except SDMSException as exc:
+            logger.error("Revoke failed: %s", exc)
+            return {"success": False, "error": f"Revoke failed: {exc}"}
+
+    # ------------------------------------------------------------------
+    # Delete
+    # ------------------------------------------------------------------
+
+    def delete_document(self, document_id: str) -> dict[str, Any]:
+        """Soft-delete a document and remove its encrypted file from storage.
+
+        RBAC: Requires ``delete_document`` permission (admin, editor).
+        Only the document owner or an admin may delete.
+
+        Args:
+            document_id: The UUID4 hex document identifier.
+
+        Returns:
+            A dict with the delete result.
+        """
+        try:
+            self._session_mgr.require_permission(Permission.DELETE_DOCUMENT)
+
+            doc = self._listing_service.get_document_detail(document_id)
+            session = self._session_mgr.get_current_session()
+
+            if doc.get("owner_id") != session.user_id and session.role != "admin":
+                raise AuthorizationError("You can only delete your own documents.")
+
+            self._doc_repo.soft_delete_document(document_id)
+            self._audit_service.log_event(
+                action=AuditAction.DOCUMENT_DELETE.value,
+                resource_type=ResourceType.DOCUMENT.value,
+                resource_id=document_id,
+                resource_name=doc.get("original_filename", ""),
+                status=OperationStatus.SUCCESS.value,
+                message=f"Document '{doc.get('original_filename', '')}' deleted.",
+                severity=SeverityLevel.INFO.value,
+            )
+            return {
+                "success": True,
+                "document_id": document_id,
+                "message": f"Document '{doc.get('original_filename', '')}' deleted successfully.",
+            }
+        except AuthenticationError as exc:
+            logger.warning("Delete denied — not authenticated.")
+            return {"success": False, "error": str(exc)}
+        except AuthorizationError as exc:
+            logger.warning("Delete denied — insufficient permissions: %s", exc)
+            return {"success": False, "error": str(exc)}
+        except DocumentNotFoundError as exc:
+            logger.warning("Delete failed — document not found: %s", exc)
+            return {"success": False, "error": str(exc)}
+        except SDMSException as exc:
+            logger.error("Delete failed: %s", exc)
+            return {"success": False, "error": f"Delete failed: {exc}"}
+
+    # ------------------------------------------------------------------
+    # User listing (for share dialog)
+    # ------------------------------------------------------------------
+
+    def list_all_users(self) -> dict[str, Any]:
+        """List all active users (for the share dialog dropdown).
+
+        Returns:
+            A dict with ``{"success": True, "users": [...]}``.
+        """
+        try:
+            self._session_mgr.require_permission(Permission.VIEW_DOCUMENT)
+            user_repo = UserRepository()
+            users = user_repo.get_all_users(limit=200)
+            current_user_id = self._session_mgr.get_current_user_id()
+            user_list = [
+                {
+                    "user_id": u.user_id,
+                    "username": u.username,
+                    "role": u.role,
+                }
+                for u in users
+                if u.user_id != current_user_id and u.is_active
+            ]
+            return {"success": True, "users": user_list}
+        except AuthenticationError as exc:
+            return {"success": False, "error": str(exc), "users": []}
+        except SDMSException as exc:
+            logger.error("Failed to list users: %s", exc)
+            return {"success": False, "error": str(exc), "users": []}

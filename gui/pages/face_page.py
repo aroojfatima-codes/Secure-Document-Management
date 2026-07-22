@@ -219,10 +219,10 @@ class FacePage(ctk.CTkFrame):
             Toast(self, result.get("error", "Enrollment failed"), "error")
         else:
             self._enroll_status.configure(
-                text=f"Successfully enrolled '{username}'",
-                text_color=C.success,
+                text="No backend connected. Cannot enroll.",
+                text_color=C.danger,
             )
-            Toast(self, f"Face enrolled for '{username}'", "success")
+            Toast(self, "Face enrollment unavailable — no backend controller.", "error")
 
     def _do_verify(self):
         self._verify_status.configure(text="Initializing camera...", text_color=C.info)
@@ -253,8 +253,8 @@ class FacePage(ctk.CTkFrame):
             Toast(self, result.get("error", "Face verification failed"), "error")
         else:
             self._verify_status.configure(text="", text_color=C.text_secondary)
-            self._result_label.configure(text="\u2714 Identity Verified", text_color=C.success)
-            Toast(self, "Face verification successful!", "success")
+            self._result_label.configure(text="\u2718 No Backend Connected", text_color=C.danger)
+            Toast(self, "Face verification unavailable — no backend controller.", "error")
 
     def apply_theme(self):
         self.configure(fg_color=C.bg_main)

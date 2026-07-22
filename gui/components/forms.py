@@ -169,6 +169,17 @@ class StyledComboBox(ctk.CTkFrame):
         except Exception:
             pass
 
+    def apply_theme(self):
+        try:
+            self.combo.configure(
+                fg_color=C.bg_input, border_color=C.border,
+                button_color=C.primary, button_hover_color=C.primary_hover,
+                dropdown_fg_color=C.bg_card, dropdown_hover_color=C.bg_card_hover,
+                text_color=C.text_primary,
+            )
+        except Exception:
+            pass
+
 
 class StyledButton(ctk.CTkButton):
 
@@ -239,5 +250,14 @@ class StyledText(ctk.CTkFrame):
     def clear(self):
         try:
             self.textbox.delete("1.0", "end")
+        except Exception:
+            pass
+
+    def apply_theme(self):
+        try:
+            self.textbox.configure(
+                fg_color=C.bg_input, text_color=C.text_primary,
+                border_color=C.border,
+            )
         except Exception:
             pass

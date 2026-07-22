@@ -22,10 +22,14 @@ C = tm.C
 class DocumentDetailPage(ctk.CTkFrame):
     """Show detailed metadata for a single document."""
 
-    def __init__(self, master, app: "App | None" = None, **kwargs) -> None:
+    def __init__(self, master, app: "App | None" = None, user: dict | None = None, **kwargs) -> None:
         kwargs.pop("fg_color", None)
         super().__init__(master, fg_color=C.bg_main, **kwargs)
         self._app = app
+        self._user = user or {}
+        self._role = self._user.get("role", "viewer").lower()
+        self._can_share = self._role in ("admin", "editor")
+        self._can_download = True
         self._doc_id: str = ""
 
         header = PageHeader(
@@ -123,9 +127,10 @@ class DocumentDetailPage(ctk.CTkFrame):
             actions, text="Download", variant="primary", command=self._download, width=130,
         ).pack(side="left", padx=(0, 8))
 
-        StyledButton(
-            actions, text="Share", variant="success", command=self._share, width=130,
-        ).pack(side="left", padx=(0, 8))
+        if self._can_share:
+            StyledButton(
+                actions, text="Share", variant="success", command=self._share, width=130,
+            ).pack(side="left", padx=(0, 8))
 
         StyledButton(
             actions, text="Back to Documents", variant="outline",

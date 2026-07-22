@@ -196,3 +196,21 @@ class Document(BaseModel):
             )
         )
         self.touch()
+
+    def remove_share(self, user_id: str) -> bool:
+        """Remove a sharing entry for the given user.
+
+        Args:
+            user_id: The target user's identifier.
+
+        Returns:
+            ``True`` if the entry was found and removed, ``False`` otherwise.
+        """
+        before = len(self.shared_with)
+        self.shared_with = [
+            sw for sw in self.shared_with if sw.user_id != user_id
+        ]
+        if len(self.shared_with) < before:
+            self.touch()
+            return True
+        return False

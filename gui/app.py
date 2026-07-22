@@ -1,4 +1,9 @@
-"""Main application controller -- navigation, theming, sidebar toggle, page routing."""
+"""Main application controller -- navigation, theming, sidebar toggle, page routing.
+
+RBAC enforcement: the controller maintains a role → allowed-pages mapping.
+Every navigation request is checked against this mapping.  Unauthorised
+pages show an "Access Denied" overlay instead of the real content.
+"""
 
 from __future__ import annotations
 
@@ -25,6 +30,25 @@ from gui.pages.share_page import SharePage
 from gui.pages.shared_page import SharedPage
 from gui.pages.upload_page import UploadPage
 from gui.theme import Dim, ThemeManager
+
+# ------------------------------------------------------------------
+# RBAC: pages allowed per role
+# ------------------------------------------------------------------
+_ROLE_ALLOWED_PAGES: dict[str, frozenset[str]] = {
+    "admin": frozenset({
+        "dashboard", "upload", "documents", "document_detail",
+        "download", "share", "shared", "search", "face",
+        "audit", "settings", "profile",
+    }),
+    "editor": frozenset({
+        "dashboard", "upload", "documents", "document_detail",
+        "download", "share", "shared", "search", "face", "profile",
+    }),
+    "viewer": frozenset({
+        "dashboard", "documents", "document_detail",
+        "download", "shared", "search", "face", "profile",
+    }),
+}
 
 tm = ThemeManager()
 C = tm.C
@@ -71,6 +95,7 @@ class App(ctk.CTk):
         self._topbar.grid(row=0, column=0, sticky="ew")
         self._topbar.set_theme_change_callback(self._change_theme)
         self._topbar.set_logout_callback(self._logout)
+        self._topbar.set_search_callback(self._on_topbar_search)
 
         self._page_container = ctk.CTkFrame(right, fg_color=C.bg_main)
         self._page_container.grid(row=1, column=0, sticky="nsew")
@@ -194,6 +219,9 @@ class App(ctk.CTk):
         Toast(self, "No controller available for face login", "error")
 
     def _handle_register(self, username, fullname, email, role, password):
+        if role not in ("viewer",):
+            Toast(self, "Self-registration is restricted to the 'viewer' role. Admin or editor roles must be assigned by an administrator.", "error")
+            return
         if self.controller:
             try:
                 result = self.controller["auth"].register(username, password, role)
@@ -231,6 +259,14 @@ class App(ctk.CTk):
         self._show_login()
         Toast(self, "Logged out successfully", "info")
 
+    def _is_page_allowed(self, page_name: str) -> bool:
+        """Check whether the current user's role allows access to *page_name*."""
+        if not self._current_user:
+            return True
+        role = self._current_user.get("role", "").lower()
+        allowed = _ROLE_ALLOWED_PAGES.get(role, frozenset())
+        return page_name in allowed
+
     def _navigate(self, page_name: str):
         try:
             if page_name == "login":
@@ -238,6 +274,9 @@ class App(ctk.CTk):
                 return
             if page_name == "register":
                 self._show_register()
+                return
+            if not self._is_page_allowed(page_name):
+                self._show_access_denied(page_name)
                 return
             if page_name == self._active_page_name and page_name in self._page_cache:
                 return
@@ -275,6 +314,50 @@ class App(ctk.CTk):
             traceback.print_exc()
             Toast(self, f"Error showing page '{name}': {e}", "error")
 
+    def _show_access_denied(self, page_name: str):
+        """Display an 'Access Denied' page when a user tries to reach a restricted page."""
+        self._clear_pages()
+        container = ctk.CTkFrame(self._page_container, fg_color=C.bg_main)
+        container.grid(row=0, column=0, sticky="nsew")
+        container.grid_columnconfigure(0, weight=1)
+        container.grid_rowconfigure(0, weight=1)
+
+        card = ctk.CTkFrame(
+            container, fg_color=C.bg_card,
+            corner_radius=Dim.RADIUS_LG, border_width=1, border_color=C.danger,
+        )
+        card.grid(row=0, column=0)
+
+        ctk.CTkLabel(
+            card, text="\u26D4",
+            font=("Segoe UI", 48),
+            text_color=C.danger,
+        ).pack(pady=(Dim.PAD_XL, Dim.PAD_SM))
+        ctk.CTkLabel(
+            card, text="Access Denied",
+            font=("Segoe UI", 22, "bold"), text_color=C.danger,
+        ).pack(pady=(0, Dim.PAD_SM))
+        ctk.CTkLabel(
+            card,
+            text=f"You do not have permission to access '{self._breadcrumb_for(page_name)}'.",
+            font=("Segoe UI", 13), text_color=C.text_secondary, wraplength=350,
+        ).pack(padx=Dim.PAD_XL, pady=(0, Dim.PAD_MD))
+        ctk.CTkButton(
+            card, text="Back to Dashboard", width=160, height=36,
+            fg_color=C.primary, hover_color=C.primary_hover,
+            text_color=C.text_on_primary, corner_radius=Dim.RADIUS,
+            command=lambda: self._navigate("dashboard"),
+        ).pack(pady=(0, Dim.PAD_XL))
+
+        self._active_page_name = ""
+        self._topbar.set_breadcrumb("Access Denied")
+        u = self._current_user or {}
+        self._topbar.set_user(
+            u.get("full_name", u.get("username", "User")),
+            u.get("role", ""),
+        )
+        fade_in(container)
+
     def _create_page(self, name: str):
         u = self._current_user or {}
         ctrl = self.controller
@@ -290,16 +373,16 @@ class App(ctk.CTk):
                     pass
 
         def _make_dashboard():
-            return DashboardPage(self._page_container, user=u)
+            return DashboardPage(self._page_container, user=u, on_navigate=self._navigate)
 
         def _make_documents():
-            page = DocumentsPage(self._page_container)
+            page = DocumentsPage(self._page_container, user=u)
             page._app = self
             _load_docs_for_page(page)
             return page
 
         def _make_document_detail():
-            return DocumentDetailPage(self._page_container, app=self)
+            return DocumentDetailPage(self._page_container, app=self, user=u)
 
         def _make_upload():
             page = UploadPage(self._page_container)
@@ -313,13 +396,20 @@ class App(ctk.CTk):
             return page
 
         def _make_share():
-            page = SharePage(self._page_container)
+            page = SharePage(self._page_container, controller=ctrl)
             page._app = self
             _load_docs_for_page(page)
+            if ctrl:
+                try:
+                    result = ctrl["document"].list_all_users()
+                    if result and result.get("success"):
+                        page.load_users(result.get("users", []))
+                except Exception:
+                    pass
             return page
 
         def _make_shared():
-            page = SharedPage(self._page_container)
+            page = SharedPage(self._page_container, controller=ctrl, user=u)
             page._app = self
             _load_docs_for_page(page, "list_shared_with_me")
             return page
@@ -389,6 +479,9 @@ class App(ctk.CTk):
                 Toast(self, f"Error creating page '{name}': {e}", "error")
                 return None
         return None
+
+    def _on_topbar_search(self, query: str):
+        self._navigate("search")
 
     def _breadcrumb_for(self, name: str) -> str:
         titles = {

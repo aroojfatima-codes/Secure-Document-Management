@@ -22,6 +22,12 @@ logger = get_logger(__name__)
 # ---------------------------------------------------------------------------
 _FACE_RECOGNITION_AVAILABLE: bool = True
 _FACE_CASCADE: cv2.CascadeClassifier | None = None
+_LBPH_AVAILABLE: bool = False
+
+try:
+    _LBPH_AVAILABLE = hasattr(cv2, "face") and hasattr(cv2.face, "LBPHFaceRecognizer_create")
+except Exception:
+    _LBPH_AVAILABLE = False
 
 
 def _download_cascade(dest_path: str) -> None:
@@ -213,7 +219,9 @@ class FaceRecognitionService:
         later for recognition.
         """
         if not _FACE_RECOGNITION_AVAILABLE:
-            return {"success": False, "error": "Face recognition is not available."}
+            return {"success": False, "error": "Face recognition is not available. Haar cascade classifier could not be loaded."}
+        if not _LBPH_AVAILABLE:
+            return {"success": False, "error": "LBPH face recognizer is not available. Install opencv-contrib-python."}
 
         try:
             self._check_camera()

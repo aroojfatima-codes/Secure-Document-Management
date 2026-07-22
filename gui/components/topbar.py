@@ -75,6 +75,7 @@ class TopBar(ctk.CTkFrame):
 
         self._on_theme_change_cb: Callable | None = None
         self._on_logout_cb: Callable | None = None
+        self._on_search_cb: Callable | None = None
         self._logged_in = False
 
     def set_breadcrumb(self, text: str):
@@ -92,12 +93,23 @@ class TopBar(ctk.CTkFrame):
     def set_logout_callback(self, cb: Callable):
         self._on_logout_cb = cb
 
+    def set_search_callback(self, cb: Callable):
+        self._on_search_cb = cb
+        self._search_entry.bind("<Return>", lambda e: self._on_search_submit())
+
+    def _on_search_submit(self):
+        query = self._search_var.get().strip()
+        if self._on_search_cb and query:
+            self._on_search_cb(query)
+
     def set_logged_in(self, logged_in: bool):
         self._logged_in = logged_in
         if logged_in:
             self._logout_btn.pack(side="left", padx=(12, 0))
         else:
             self._logout_btn.pack_forget()
+            self._user_label.configure(text="User")
+            self._search_var.set("")
 
     def _toggle_theme(self):
         try:

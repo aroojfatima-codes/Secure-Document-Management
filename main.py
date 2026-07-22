@@ -6,8 +6,7 @@ the logging and database subsystems, verifies the storage directories,
 and launches the modern GUI.
 
 Usage:
-    python main.py          Launch the GUI (default)
-    python main.py --cli    Launch the CLI (legacy)
+    python main.py          Launch the GUI
 """
 
 from __future__ import annotations
@@ -42,24 +41,19 @@ def main() -> None:
     storage_mgr.initialise()
 
     try:
-        if "--cli" in sys.argv:
-            from cli.main import display_welcome, run_cli
-            display_welcome()
-            run_cli()
-        else:
-            from controllers.auth_controller import AuthController
-            from controllers.audit_controller import AuditController
-            from controllers.document_controller import DocumentController
-            from controllers.face_controller import FaceController
-            from gui.app import SDMSApp
+        from controllers.auth_controller import AuthController
+        from controllers.audit_controller import AuditController
+        from controllers.document_controller import DocumentController
+        from controllers.face_controller import FaceController
+        from gui.app import SDMSApp
 
-            app = SDMSApp(controller={
-                "auth": AuthController(),
-                "document": DocumentController(),
-                "audit": AuditController(),
-                "face": FaceController(),
-            })
-            app.mainloop()
+        app = SDMSApp(controller={
+            "auth": AuthController(),
+            "document": DocumentController(),
+            "audit": AuditController(),
+            "face": FaceController(),
+        })
+        app.mainloop()
     finally:
         db_manager.disconnect()
         logger.info("%s shut down gracefully.", settings.APP_NAME)
